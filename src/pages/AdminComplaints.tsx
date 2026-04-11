@@ -11,24 +11,35 @@ export default function AdminComplaints() {
   const [selectedComplaint, setSelectedComplaint] = useState<any>(null);
   const [showBooking, setShowBooking] = useState(false);
   const [complaints, setComplaints] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [bookingForm, setBookingForm] = useState({
-    bookingId: "",
-    bookedDate: "",
-    manufacturerStatus: "",
-    referenceNo: "",
+    booking_id: "",
+    booked_date: "",
+    manufacturer_status: "",
+    reference_no: "",
     notes: "",
   });
   const [statusUpdate, setStatusUpdate] = useState<string>("Pending");
+
+  // Helper function to get manufacturer booking for a complaint
+  const getManufacturerUpdate = (complaintId: number) => {
+    return bookings.find((b) => b.complaint_id === complaintId);
+  };
 
   useEffect(() => {
     const fetchComplaints = async () => {
       setLoading(true);
       try {
         const result = await complaintApi.getAll();
+        const bookingResult = await bookingApi.getAll();
+        
         if (result.success) {
           setComplaints(result.data?.complaints || []);
+        }
+        if (bookingResult.success) {
+          setBookings(bookingResult.data?.bookings || []);
         }
       } catch (error) {
         console.error("Failed to fetch complaints:", error);
@@ -50,7 +61,7 @@ export default function AdminComplaints() {
 
   const handleSaveBooking = async () => {
     if (!selectedComplaint) return;
-    if (!bookingForm.bookingId) {
+    if (!bookingForm.booking_id) {
       toast.error("Please enter a manufacturer booking ID");
       return;
     }
@@ -60,11 +71,11 @@ export default function AdminComplaints() {
       // Create booking
       const bookingResult = await bookingApi.create({
         complaintId: selectedComplaint.id,
-        bookingId: bookingForm.bookingId,
+        bookingId: bookingForm.booking_id,
         bookedDate:
-          bookingForm.bookedDate || new Date().toISOString().split("T")[0],
-        manufacturerStatus: bookingForm.manufacturerStatus,
-        referenceNo: bookingForm.referenceNo,
+          bookingForm.booked_date || new Date().toISOString().split("T")[0],
+        manufacturerStatus: bookingForm.manufacturer_status,
+        referenceNo: bookingForm.reference_no,
         notes: bookingForm.notes,
       });
 
@@ -87,17 +98,21 @@ export default function AdminComplaints() {
       setShowBooking(false);
       setSelectedComplaint(null);
       setBookingForm({
-        bookingId: "",
-        bookedDate: "",
-        manufacturerStatus: "",
-        referenceNo: "",
+        booking_id: "",
+        booked_date: "",
+        manufacturer_status: "",
+        reference_no: "",
         notes: "",
       });
 
-      // Refresh complaints
+      // Refresh complaints and bookings
       const refreshResult = await complaintApi.getAll();
+      const refreshBookings = await bookingApi.getAll();
       if (refreshResult.success) {
         setComplaints(refreshResult.data?.complaints || []);
+      }
+      if (refreshBookings.success) {
+        setBookings(refreshBookings.data?.bookings || []);
       }
     } catch (error) {
       toast.error("An error occurred");
@@ -182,7 +197,7 @@ export default function AdminComplaints() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {c.createdAt}
+                      {c.created_at}
                     </td>
                     <td className="px-4 py-3 flex gap-1">
                       <button
@@ -260,7 +275,7 @@ export default function AdminComplaints() {
                       Issue Description
                     </p>
                     <p className="text-sm text-foreground mt-1">
-                      {selectedComplaint.issueDescription}
+                      {selectedComplaint.issue_description}
                     </p>
                   </div>
                   {getManufacturerUpdate(selectedComplaint.id) && (
@@ -276,21 +291,21 @@ export default function AdminComplaints() {
                               <p className="text-[10px] text-muted-foreground">
                                 Booking ID
                               </p>
-                              <p className="text-foreground">{m.bookingId}</p>
+                              <p className="text-foreground">{m.booking_id}</p>
                             </div>
                             <div>
                               <p className="text-[10px] text-muted-foreground">
                                 Status
                               </p>
                               <p className="text-foreground">
-                                {m.manufacturerStatus}
+                                {m.manufacturer_status}
                               </p>
                             </div>
                             <div>
                               <p className="text-[10px] text-muted-foreground">
                                 Reference
                               </p>
-                              <p className="text-foreground">{m.referenceNo}</p>
+                              <p className="text-foreground">{m.reference_no}</p>
                             </div>
                             <div>
                               <p className="text-[10px] text-muted-foreground">
@@ -307,28 +322,28 @@ export default function AdminComplaints() {
               ) : (
                 <>
                   <h2 className="font-display font-bold text-lg mb-4">
-                    Manufacturer Booking — {selectedComplaint.ticketNo}
+                    Manufacturer Booking — {selectedComplaint.ticket_no}
                   </h2>
                   <div className="space-y-4">
                     {[
                       {
-                        key: "bookingId",
+                        key: "booking_id",
                         label: "Manufacturer Booking ID *",
                         placeholder: "e.g. MFG-HIK-12345",
                       },
                       {
-                        key: "bookedDate",
+                        key: "booked_date",
                         label: "Booking Date",
                         placeholder: "YYYY-MM-DD",
                         type: "date",
                       },
                       {
-                        key: "manufacturerStatus",
+                        key: "manufacturer_status",
                         label: "Manufacturer Status",
                         placeholder: "e.g. Under Review",
                       },
                       {
-                        key: "referenceNo",
+                        key: "reference_no",
                         label: "Reference Number",
                         placeholder: "e.g. REF-2026-XXXX",
                       },
