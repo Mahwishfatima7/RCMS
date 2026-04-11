@@ -248,7 +248,9 @@ export default function AdminBookings() {
                   </h2>
                   <div className="grid grid-cols-2 gap-4 text-sm mb-4">
                     <div>
-                      <p className="text-xs text-muted-foreground">Booking ID</p>
+                      <p className="text-xs text-muted-foreground">
+                        Booking ID
+                      </p>
                       <p className="text-foreground font-medium">
                         {selectedBooking.booking_id}
                       </p>

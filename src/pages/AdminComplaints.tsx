@@ -3,7 +3,15 @@ import { AppLayout } from "@/components/AppLayout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { complaintApi, bookingApi } from "@/services/apiService";
 import { motion } from "framer-motion";
-import { Search, Eye, BookOpen, Save, Loader, Edit, Trash2 } from "lucide-react";
+import {
+  Search,
+  Eye,
+  BookOpen,
+  Save,
+  Loader,
+  Edit,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 
 export default function AdminComplaints() {
@@ -24,10 +32,6 @@ export default function AdminComplaints() {
   const [statusUpdate, setStatusUpdate] = useState<string>("Pending");
   const [editingComplaint, setEditingComplaint] = useState<boolean>(false);
   const [editComplaintForm, setEditComplaintForm] = useState({
-    customer_name: "",
-    customer_phone: "",
-    customer_email: "",
-    customer_address: "",
     issue_description: "",
   });
   const [editingBooking, setEditingBooking] = useState<boolean>(false);
@@ -49,7 +53,7 @@ export default function AdminComplaints() {
       try {
         const result = await complaintApi.getAll();
         const bookingResult = await bookingApi.getAll();
-        
+
         if (result.success) {
           setComplaints(result.data?.complaints || []);
         }
@@ -139,10 +143,6 @@ export default function AdminComplaints() {
   const handleEditComplaint = () => {
     if (!selectedComplaint) return;
     setEditComplaintForm({
-      customer_name: selectedComplaint.customer_name,
-      customer_phone: selectedComplaint.customer_phone,
-      customer_email: selectedComplaint.customer_email,
-      customer_address: selectedComplaint.customer_address,
       issue_description: selectedComplaint.issue_description,
     });
     setEditingComplaint(true);
@@ -152,12 +152,15 @@ export default function AdminComplaints() {
     if (!selectedComplaint) return;
     setSubmitting(true);
     try {
-      const result = await complaintApi.update(selectedComplaint.id, editComplaintForm);
+      const result = await complaintApi.update(
+        selectedComplaint.id,
+        editComplaintForm,
+      );
       if (result.success) {
         toast.success("Complaint updated successfully");
         setEditingComplaint(false);
         setSelectedComplaint(null);
-        
+
         // Refresh complaints
         const refreshResult = await complaintApi.getAll();
         if (refreshResult.success) {
@@ -175,14 +178,14 @@ export default function AdminComplaints() {
 
   const handleDeleteComplaint = async (complaintId: number) => {
     if (!confirm("Are you sure you want to delete this complaint?")) return;
-    
+
     setSubmitting(true);
     try {
       const result = await complaintApi.delete(complaintId);
       if (result.success) {
         toast.success("Complaint deleted successfully");
         setSelectedComplaint(null);
-        
+
         // Refresh complaints
         const refreshResult = await complaintApi.getAll();
         if (refreshResult.success) {
@@ -213,14 +216,14 @@ export default function AdminComplaints() {
   const handleSaveBookingEdit = async () => {
     const booking = getManufacturerUpdate(selectedComplaint.id);
     if (!booking) return;
-    
+
     setSubmitting(true);
     try {
       const result = await bookingApi.update(booking.id, editBookingForm);
       if (result.success) {
         toast.success("Booking updated successfully");
         setEditingBooking(false);
-        
+
         // Refresh bookings
         const refreshBookings = await bookingApi.getAll();
         if (refreshBookings.success) {
@@ -238,13 +241,13 @@ export default function AdminComplaints() {
 
   const handleDeleteBooking = async (bookingId: number) => {
     if (!confirm("Are you sure you want to delete this booking?")) return;
-    
+
     setSubmitting(true);
     try {
       const result = await bookingApi.delete(bookingId);
       if (result.success) {
         toast.success("Booking deleted successfully");
-        
+
         // Refresh bookings
         const refreshBookings = await bookingApi.getAll();
         if (refreshBookings.success) {
@@ -397,7 +400,10 @@ export default function AdminComplaints() {
                           ["Serial", selectedComplaint.serial_no],
                           ["Model", selectedComplaint.device_model],
                           ["Purchase Date", selectedComplaint.purchase_date],
-                          ["Warranty Expiry", selectedComplaint.warranty_expiry],
+                          [
+                            "Warranty Expiry",
+                            selectedComplaint.warranty_expiry,
+                          ],
                           [
                             "Warranty",
                             selectedComplaint.warranty_valid
@@ -434,7 +440,9 @@ export default function AdminComplaints() {
                               </button>
                               <button
                                 onClick={() => {
-                                  const booking = getManufacturerUpdate(selectedComplaint.id);
+                                  const booking = getManufacturerUpdate(
+                                    selectedComplaint.id,
+                                  );
                                   if (booking) handleDeleteBooking(booking.id);
                                 }}
                                 className="p-1 text-destructive hover:bg-secondary/50 rounded"
@@ -444,14 +452,18 @@ export default function AdminComplaints() {
                             </div>
                           </div>
                           {(() => {
-                            const m = getManufacturerUpdate(selectedComplaint.id)!;
+                            const m = getManufacturerUpdate(
+                              selectedComplaint.id,
+                            )!;
                             return (
                               <div className="grid grid-cols-2 gap-3 text-sm">
                                 <div>
                                   <p className="text-[10px] text-muted-foreground">
                                     Booking ID
                                   </p>
-                                  <p className="text-foreground">{m.booking_id}</p>
+                                  <p className="text-foreground">
+                                    {m.booking_id}
+                                  </p>
                                 </div>
                                 <div>
                                   <p className="text-[10px] text-muted-foreground">
@@ -465,7 +477,9 @@ export default function AdminComplaints() {
                                   <p className="text-[10px] text-muted-foreground">
                                     Reference
                                   </p>
-                                  <p className="text-foreground">{m.reference_no}</p>
+                                  <p className="text-foreground">
+                                    {m.reference_no}
+                                  </p>
                                 </div>
                                 <div>
                                   <p className="text-[10px] text-muted-foreground">
@@ -486,7 +500,9 @@ export default function AdminComplaints() {
                           <Edit className="h-4 w-4" /> Edit
                         </button>
                         <button
-                          onClick={() => handleDeleteComplaint(selectedComplaint.id)}
+                          onClick={() =>
+                            handleDeleteComplaint(selectedComplaint.id)
+                          }
                           className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:opacity-90 transition-all"
                         >
                           <Trash2 className="h-4 w-4" /> Delete
@@ -504,50 +520,13 @@ export default function AdminComplaints() {
                     </>
                   ) : (
                     <>
+                      <h3 className="font-display font-semibold text-sm mb-4">
+                        Edit Issue Description
+                      </h3>
                       <div className="space-y-4">
-                        {[
-                          {
-                            key: "customer_name",
-                            label: "Customer Name *",
-                            placeholder: "Customer name",
-                          },
-                          {
-                            key: "customer_phone",
-                            label: "Phone *",
-                            placeholder: "+971...",
-                          },
-                          {
-                            key: "customer_email",
-                            label: "Email",
-                            placeholder: "customer@email.com",
-                          },
-                          {
-                            key: "customer_address",
-                            label: "Address",
-                            placeholder: "Full address",
-                          },
-                        ].map((f) => (
-                          <div key={f.key}>
-                            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              {f.label}
-                            </label>
-                            <input
-                              type="text"
-                              value={editComplaintForm[f.key as keyof typeof editComplaintForm]}
-                              onChange={(e) =>
-                                setEditComplaintForm((prev) => ({
-                                  ...prev,
-                                  [f.key]: e.target.value,
-                                }))
-                              }
-                              placeholder={f.placeholder}
-                              className="mt-1 w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
-                            />
-                          </div>
-                        ))}
                         <div>
                           <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Issue Description
+                            Issue Description *
                           </label>
                           <textarea
                             value={editComplaintForm.issue_description}
@@ -558,10 +537,14 @@ export default function AdminComplaints() {
                               }))
                             }
                             placeholder="Describe the issue..."
-                            rows={4}
+                            rows={6}
                             className="mt-1 w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
                           />
                         </div>
+                        <p className="text-xs text-muted-foreground">
+                          Note: Customer information cannot be edited. Contact
+                          the agent or administrator to modify customer details.
+                        </p>
                       </div>
                       <div className="mt-5 flex gap-2">
                         <button
@@ -571,7 +554,8 @@ export default function AdminComplaints() {
                         >
                           {submitting ? (
                             <>
-                              <Loader className="h-4 w-4 animate-spin" /> Saving...
+                              <Loader className="h-4 w-4 animate-spin" />{" "}
+                              Saving...
                             </>
                           ) : (
                             <>
@@ -626,7 +610,9 @@ export default function AdminComplaints() {
                             </label>
                             <input
                               type={f.type || "text"}
-                              value={bookingForm[f.key as keyof typeof bookingForm]}
+                              value={
+                                bookingForm[f.key as keyof typeof bookingForm]
+                              }
                               onChange={(e) =>
                                 setBookingForm((prev) => ({
                                   ...prev,
@@ -680,7 +666,8 @@ export default function AdminComplaints() {
                         >
                           {submitting ? (
                             <>
-                              <Loader className="h-4 w-4 animate-spin" /> Saving...
+                              <Loader className="h-4 w-4 animate-spin" />{" "}
+                              Saving...
                             </>
                           ) : (
                             <>
@@ -719,7 +706,11 @@ export default function AdminComplaints() {
                             </label>
                             <input
                               type="text"
-                              value={editBookingForm[f.key as keyof typeof editBookingForm]}
+                              value={
+                                editBookingForm[
+                                  f.key as keyof typeof editBookingForm
+                                ]
+                              }
                               onChange={(e) =>
                                 setEditBookingForm((prev) => ({
                                   ...prev,
@@ -756,7 +747,8 @@ export default function AdminComplaints() {
                           >
                             {submitting ? (
                               <>
-                                <Loader className="h-4 w-4 animate-spin" /> Saving...
+                                <Loader className="h-4 w-4 animate-spin" />{" "}
+                                Saving...
                               </>
                             ) : (
                               <>
