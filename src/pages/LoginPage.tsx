@@ -10,6 +10,7 @@ import {
   BarChart3,
   ArrowRight,
   AlertCircle,
+  Loader,
 } from "lucide-react";
 
 const roles: {
@@ -43,34 +44,61 @@ const roles: {
 ];
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, register } = useAuth();
   const navigate = useNavigate();
   const [isRegistering, setIsRegistering] = useState(false);
 
   // Login form
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
+  const [loginError, setLoginError] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
 
   // Registration form
   const [regFullName, setRegFullName] = useState("");
   const [regEmail, setRegEmail] = useState("");
-  const [regUsername, setRegUsername] = useState("");
   const [regPassword, setRegPassword] = useState("");
   const [regConfirmPassword, setRegConfirmPassword] = useState("");
   const [regSelectedRole, setRegSelectedRole] = useState<UserRole | null>(null);
   const [regError, setRegError] = useState("");
-  const [regSuccess, setRegSuccess] = useState(false);
+  const [regLoading, setRegLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedRole) return;
-    const roleInfo = roles.find((r) => r.role === selectedRole);
-    login(selectedRole);
-    navigate(roleInfo?.path || "/");
+    setLoginError("");
+
+    if (!email.trim()) {
+      setLoginError("Email is required");
+      return;
+    }
+    if (!password.trim()) {
+      setLoginError("Password is required");
+      return;
+    }
+
+    setLoginLoading(true);
+    try {
+      const result = await login(email, password);
+      if (result.success) {
+        // Redirect to agent dashboard by default (user role determines final destination)
+        navigate("/agent/new");
+      } else {
+        setLoginError(
+          result.error || "Login failed. Please check your credentials.",
+        );
+      }
+    } catch (error) {
+      setLoginError(
+        error instanceof Error
+          ? error.message
+          : "An error occurred during login",
+      );
+    } finally {
+      setLoginLoading(false);
+    }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegError("");
 
@@ -81,10 +109,6 @@ export default function LoginPage() {
     }
     if (!regEmail.includes("@")) {
       setRegError("Please enter a valid email");
-      return;
-    }
-    if (!regUsername.trim() || regUsername.length < 3) {
-      setRegError("Username must be at least 3 characters");
       return;
     }
     if (regPassword.length < 6) {
@@ -100,28 +124,44 @@ export default function LoginPage() {
       return;
     }
 
-    // Registration successful (in a real app, you'd send this to a backend)
-    setRegSuccess(true);
-    setTimeout(() => {
-      setRegSuccess(false);
-      setIsRegistering(false);
-      // Reset form
-      setRegFullName("");
-      setRegEmail("");
-      setRegUsername("");
-      setRegPassword("");
-      setRegConfirmPassword("");
-      setRegSelectedRole(null);
-    }, 2000);
+    setRegLoading(true);
+    try {
+      const result = await register({
+        name: regFullName,
+        email: regEmail,
+        password: regPassword,
+        role: regSelectedRole,
+      });
+
+      if (result.success) {
+        // Redirect based on selected role
+        const roleInfo = roles.find((r) => r.role === regSelectedRole);
+        navigate(roleInfo?.path || "/");
+      } else {
+        setRegError(result.error || "Registration failed. Please try again.");
+      }
+    } catch (error) {
+      setRegError(
+        error instanceof Error
+          ? error.message
+          : "An error occurred during registration",
+      );
+    } finally {
+      setRegLoading(false);
+    }
   };
 
   const toggleMode = () => {
     setIsRegistering(!isRegistering);
+    setLoginError("");
     setRegError("");
-    setRegSuccess(false);
-    setUsername("");
+    setEmail("");
     setPassword("");
-    setSelectedRole(null);
+    setRegFullName("");
+    setRegEmail("");
+    setRegPassword("");
+    setRegConfirmPassword("");
+    setRegSelectedRole(null);
   };
 
   return (
@@ -162,6 +202,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => !isRegistering && toggleMode()}
+            disabled={isRegistering && loginLoading}
             className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
               !isRegistering
                 ? "bg-primary text-primary-foreground"
@@ -173,6 +214,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => isRegistering && toggleMode()}
+            disabled={!isRegistering && loginLoading}
             className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
               isRegistering
                 ? "bg-primary text-primary-foreground"
@@ -185,72 +227,73 @@ export default function LoginPage() {
 
         {/* LOGIN FORM */}
         {!isRegistering ? (
-          <form onSubmit={handleLogin} className="space-y-5">
-            {/* Role Selection */}
-            <div className="space-y-2">
+          <form onSubmit={handleLogin} className="space-y-4">
+            {/* Error Message */}
+            {loginError && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg"
+              >
+                <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-600">{loginError}</p>
+              </motion.div>
+            )}
+
+            {/* Email */}
+            <div>
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Select Role
+                Email
               </label>
-              <div className="grid grid-cols-3 gap-2">
-                {roles.map((r) => (
-                  <button
-                    type="button"
-                    key={r.role}
-                    onClick={() => setSelectedRole(r.role)}
-                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-center transition-all duration-200 ${
-                      selectedRole === r.role
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border/50 text-muted-foreground hover:border-primary/30 hover:bg-secondary/30"
-                    }`}
-                  >
-                    <r.icon className="h-5 w-5" />
-                    <span className="text-[10px] font-medium leading-tight">
-                      {r.label}
-                    </span>
-                  </button>
-                ))}
-              </div>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email"
+                disabled={loginLoading}
+                className="mt-1 w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              />
             </div>
 
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Username
-                </label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter username"
-                  className="mt-1 w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
-                  className="mt-1 w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                />
-              </div>
+            {/* Password */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Password
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                disabled={loginLoading}
+                className="mt-1 w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              />
             </div>
 
             <button
               type="submit"
-              disabled={!selectedRole}
+              disabled={loginLoading || !email || !password}
               className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Sign In
-              <ArrowRight className="h-4 w-4" />
+              {loginLoading ? (
+                <>
+                  <Loader className="h-4 w-4 animate-spin" />
+                  Signing In...
+                </>
+              ) : (
+                <>
+                  Sign In
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
             </button>
           </form>
         ) : (
           /* REGISTRATION FORM */
-          <form onSubmit={handleRegister} className="space-y-4">
+          <form
+            onSubmit={handleRegister}
+            className="space-y-4 max-h-96 overflow-y-auto"
+          >
             {/* Error Message */}
             {regError && (
               <motion.div
@@ -260,17 +303,6 @@ export default function LoginPage() {
               >
                 <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-red-600">{regError}</p>
-              </motion.div>
-            )}
-
-            {/* Success Message */}
-            {regSuccess && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-sm text-green-600 text-center font-medium"
-              >
-                Registration successful! Redirecting...
               </motion.div>
             )}
 
@@ -284,7 +316,8 @@ export default function LoginPage() {
                 value={regFullName}
                 onChange={(e) => setRegFullName(e.target.value)}
                 placeholder="Enter full name"
-                className="mt-1 w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                disabled={regLoading}
+                className="mt-1 w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
 
@@ -298,21 +331,8 @@ export default function LoginPage() {
                 value={regEmail}
                 onChange={(e) => setRegEmail(e.target.value)}
                 placeholder="Enter email"
-                className="mt-1 w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-              />
-            </div>
-
-            {/* Username */}
-            <div>
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Username
-              </label>
-              <input
-                type="text"
-                value={regUsername}
-                onChange={(e) => setRegUsername(e.target.value)}
-                placeholder="Choose username (min 3 chars)"
-                className="mt-1 w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                disabled={regLoading}
+                className="mt-1 w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
 
@@ -326,7 +346,8 @@ export default function LoginPage() {
                 value={regPassword}
                 onChange={(e) => setRegPassword(e.target.value)}
                 placeholder="Min 6 characters"
-                className="mt-1 w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                disabled={regLoading}
+                className="mt-1 w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
 
@@ -340,7 +361,8 @@ export default function LoginPage() {
                 value={regConfirmPassword}
                 onChange={(e) => setRegConfirmPassword(e.target.value)}
                 placeholder="Re-enter password"
-                className="mt-1 w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                disabled={regLoading}
+                className="mt-1 w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
 
@@ -355,7 +377,8 @@ export default function LoginPage() {
                     type="button"
                     key={r.role}
                     onClick={() => setRegSelectedRole(r.role)}
-                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-center transition-all duration-200 ${
+                    disabled={regLoading}
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-center transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
                       regSelectedRole === r.role
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-border/50 text-muted-foreground hover:border-primary/30 hover:bg-secondary/30"
@@ -372,25 +395,29 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90"
+              disabled={
+                regLoading ||
+                !regFullName ||
+                !regEmail ||
+                !regPassword ||
+                !regConfirmPassword ||
+                !regSelectedRole
+              }
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Create Account
-              <ArrowRight className="h-4 w-4" />
+              {regLoading ? (
+                <>
+                  <Loader className="h-4 w-4 animate-spin" />
+                  Creating Account...
+                </>
+              ) : (
+                <>
+                  Create Account
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
             </button>
           </form>
-        )}
-
-        {!isRegistering && selectedRole && (
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center text-xs text-muted-foreground mt-4"
-          >
-            Signing in as{" "}
-            <span className="text-primary font-medium">
-              {roles.find((r) => r.role === selectedRole)?.label}
-            </span>
-          </motion.p>
         )}
 
         <p className="text-center text-xs text-muted-foreground mt-4">
@@ -400,7 +427,8 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={toggleMode}
-            className="text-primary hover:underline font-medium"
+            disabled={loginLoading || regLoading}
+            className="text-primary hover:underline font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isRegistering ? "Sign In" : "Sign Up"}
           </button>
