@@ -24,7 +24,7 @@ export default function ManagementReports() {
         
         const result = await analyticsApi.getReports(filters);
         if (result.success) {
-          setReports(result.data || []);
+          setReports(result.data?.complaints || []);
         }
       } catch (error) {
         console.error('Failed to fetch reports:', error);

@@ -65,7 +65,7 @@ export default function ManagementDashboard() {
     fetchData();
   }, []);
 
-  const statusCounts = dashboard?.status_distribution || {
+  const statusCounts = dashboard?.statusDistribution || {
     Pending: 0,
     Booked: 0,
     "In-Progress": 0,
@@ -82,7 +82,7 @@ export default function ManagementDashboard() {
         name,
         value,
       }));
-  const warrantyExpired = dashboard?.warranty_expired || 0;
+  const warrantyExpired = dashboard?.warrantyExpired || 0;
 
   if (loading) {
     return (
@@ -106,7 +106,7 @@ export default function ManagementDashboard() {
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
           <StatCard
             label="Total"
-            value={dashboard?.total_complaints || 0}
+            value={dashboard?.totalComplaints || 0}
             icon={ClipboardList}
           />
           <StatCard
@@ -209,7 +209,7 @@ export default function ManagementDashboard() {
               Monthly Trends
             </h3>
             <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={dashboard?.monthly_trends || monthlyData}>
+              <BarChart data={dashboard?.monthlyTrends || monthlyData}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="hsl(216, 30%, 25%)"
@@ -252,14 +252,14 @@ export default function ManagementDashboard() {
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-muted-foreground">Active Warranty</span>
                   <span className="text-success font-medium">
-                    {(dashboard?.total_complaints || 0) - (dashboard?.warranty_expired || 0)}
+                    {(dashboard?.totalComplaints || 0) - (dashboard?.warrantyExpired || 0)}
                   </span>
                 </div>
                 <div className="h-2 bg-secondary rounded-full overflow-hidden">
                   <div
                     className="h-full bg-success rounded-full"
                     style={{
-                      width: `${dashboard?.total_complaints ? (((dashboard.total_complaints - (dashboard.warranty_expired || 0)) / dashboard.total_complaints) * 100) : 0}%`,
+                      width: `${dashboard?.totalComplaints ? (((dashboard.totalComplaints - (dashboard.warrantyExpired || 0)) / dashboard.totalComplaints) * 100) : 0}%`,
                     }}
                   />
                 </div>
@@ -268,14 +268,14 @@ export default function ManagementDashboard() {
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-muted-foreground">Expired</span>
                   <span className="text-destructive font-medium">
-                    {dashboard?.warranty_expired || 0}
+                    {dashboard?.warrantyExpired || 0}
                   </span>
                 </div>
                 <div className="h-2 bg-secondary rounded-full overflow-hidden">
                   <div
                     className="h-full bg-destructive rounded-full"
                     style={{
-                      width: `${dashboard?.total_complaints ? ((dashboard.warranty_expired || 0) / dashboard.total_complaints) * 100 : 0}%`,
+                      width: `${dashboard?.totalComplaints ? ((dashboard.warrantyExpired || 0) / dashboard.totalComplaints) * 100 : 0}%`,
                     }}
                   />
                 </div>
@@ -290,7 +290,7 @@ export default function ManagementDashboard() {
               <AlertTriangle className="h-5 w-5 text-warning" />
               <div>
                 <p className="text-2xl font-display font-bold text-foreground">
-                  {dashboard?.sla_performance || 87}%
+                  {dashboard?.slaPerformance || 87}%
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Cases resolved within SLA
