@@ -113,7 +113,8 @@ export default function ManagementDashboard() {
             label="Pending"
             value={
               Array.isArray(statusCounts)
-                ? statusCounts.find((s: any) => s.status === "Pending")?.count || 0
+                ? statusCounts.find((s: any) => s.status === "Pending")
+                    ?.count || 0
                 : statusCounts.Pending || 0
             }
             icon={Clock}
@@ -123,7 +124,8 @@ export default function ManagementDashboard() {
             label="Booked"
             value={
               Array.isArray(statusCounts)
-                ? statusCounts.find((s: any) => s.status === "Booked")?.count || 0
+                ? statusCounts.find((s: any) => s.status === "Booked")?.count ||
+                  0
                 : statusCounts.Booked || 0
             }
             icon={CheckCircle}
@@ -133,7 +135,8 @@ export default function ManagementDashboard() {
             label="In Progress"
             value={
               Array.isArray(statusCounts)
-                ? statusCounts.find((s: any) => s.status === "In-Progress")?.count || 0
+                ? statusCounts.find((s: any) => s.status === "In-Progress")
+                    ?.count || 0
                 : statusCounts["In-Progress"] || 0
             }
             icon={Truck}
@@ -143,7 +146,8 @@ export default function ManagementDashboard() {
             label="Replaced"
             value={
               Array.isArray(statusCounts)
-                ? statusCounts.find((s: any) => s.status === "Replaced")?.count || 0
+                ? statusCounts.find((s: any) => s.status === "Replaced")
+                    ?.count || 0
                 : statusCounts.Replaced || 0
             }
             icon={CheckCircle}
@@ -153,7 +157,8 @@ export default function ManagementDashboard() {
             label="Rejected"
             value={
               Array.isArray(statusCounts)
-                ? statusCounts.find((s: any) => s.status === "Rejected")?.count || 0
+                ? statusCounts.find((s: any) => s.status === "Rejected")
+                    ?.count || 0
                 : statusCounts.Rejected || 0
             }
             icon={XCircle}
@@ -252,14 +257,15 @@ export default function ManagementDashboard() {
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-muted-foreground">Active Warranty</span>
                   <span className="text-success font-medium">
-                    {(dashboard?.totalComplaints || 0) - (dashboard?.warrantyExpired || 0)}
+                    {(dashboard?.totalComplaints || 0) -
+                      (dashboard?.warrantyExpired || 0)}
                   </span>
                 </div>
                 <div className="h-2 bg-secondary rounded-full overflow-hidden">
                   <div
                     className="h-full bg-success rounded-full"
                     style={{
-                      width: `${dashboard?.totalComplaints ? (((dashboard.totalComplaints - (dashboard.warrantyExpired || 0)) / dashboard.totalComplaints) * 100) : 0}%`,
+                      width: `${dashboard?.totalComplaints ? ((dashboard.totalComplaints - (dashboard.warrantyExpired || 0)) / dashboard.totalComplaints) * 100 : 0}%`,
                     }}
                   />
                 </div>
