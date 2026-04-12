@@ -44,19 +44,19 @@ const monthlyData = [
 ];
 
 export default function ManagementDashboard() {
-  const [complaints, setComplaints] = useState<any[]>([]);
+  const [dashboard, setDashboard] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const result = await complaintApi.getAll();
+        const result = await analyticsApi.getDashboard();
         if (result.success) {
-          setComplaints(result.data?.complaints || []);
+          setDashboard(result.data);
         }
       } catch (error) {
-        console.error("Failed to fetch complaints:", error);
+        console.error("Failed to fetch dashboard:", error);
       } finally {
         setLoading(false);
       }
@@ -65,19 +65,35 @@ export default function ManagementDashboard() {
     fetchData();
   }, []);
 
-  const statusCounts = {
-    Pending: complaints.filter((c) => c.status === "Pending").length,
-    Booked: complaints.filter((c) => c.status === "Booked").length,
-    "In-Progress": complaints.filter((c) => c.status === "In-Progress").length,
-    Replaced: complaints.filter((c) => c.status === "Replaced").length,
-    Rejected: complaints.filter((c) => c.status === "Rejected").length,
+  const statusCounts = dashboard?.status_distribution || {
+    Pending: 0,
+    Booked: 0,
+    "In-Progress": 0,
+    Replaced: 0,
+    Rejected: 0,
   };
 
-  const pieData = Object.entries(statusCounts).map(([name, value]) => ({
-    name,
-    value,
-  }));
-  const warrantyExpired = complaints.filter((c) => !c.warranty_valid).length;
+  const pieData = Array.isArray(statusCounts)
+    ? statusCounts.map((item: any) => ({
+        name: item.status,
+        value: item.count,
+      }))
+    : Object.entries(statusCounts).map(([name, value]) => ({
+        name,
+        value,
+      }));
+  const warrantyExpired = dashboard?.warranty_expired || 0;
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center h-screen gap-2">
+          <Loader className="h-6 w-6 animate-spin" />
+          <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
@@ -90,36 +106,56 @@ export default function ManagementDashboard() {
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
           <StatCard
             label="Total"
-            value={complaints.length}
+            value={dashboard?.total_complaints || 0}
             icon={ClipboardList}
           />
           <StatCard
             label="Pending"
-            value={statusCounts.Pending}
+            value={
+              Array.isArray(statusCounts)
+                ? statusCounts.find((s: any) => s.status === "Pending")?.count || 0
+                : statusCounts.Pending || 0
+            }
             icon={Clock}
             colorClass="text-warning"
           />
           <StatCard
             label="Booked"
-            value={statusCounts.Booked}
+            value={
+              Array.isArray(statusCounts)
+                ? statusCounts.find((s: any) => s.status === "Booked")?.count || 0
+                : statusCounts.Booked || 0
+            }
             icon={CheckCircle}
             colorClass="text-info"
           />
           <StatCard
             label="In Progress"
-            value={statusCounts["In-Progress"]}
+            value={
+              Array.isArray(statusCounts)
+                ? statusCounts.find((s: any) => s.status === "In-Progress")?.count || 0
+                : statusCounts["In-Progress"] || 0
+            }
             icon={Truck}
             colorClass="text-primary"
           />
           <StatCard
             label="Replaced"
-            value={statusCounts.Replaced}
+            value={
+              Array.isArray(statusCounts)
+                ? statusCounts.find((s: any) => s.status === "Replaced")?.count || 0
+                : statusCounts.Replaced || 0
+            }
             icon={CheckCircle}
             colorClass="text-success"
           />
           <StatCard
             label="Rejected"
-            value={statusCounts.Rejected}
+            value={
+              Array.isArray(statusCounts)
+                ? statusCounts.find((s: any) => s.status === "Rejected")?.count || 0
+                : statusCounts.Rejected || 0
+            }
             icon={XCircle}
             colorClass="text-destructive"
           />
@@ -173,7 +209,7 @@ export default function ManagementDashboard() {
               Monthly Trends
             </h3>
             <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={monthlyData}>
+              <BarChart data={dashboard?.monthly_trends || monthlyData}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="hsl(216, 30%, 25%)"
@@ -192,7 +228,7 @@ export default function ManagementDashboard() {
                   }}
                 />
                 <Bar
-                  dataKey="complaints"
+                  dataKey="submitted"
                   fill="hsl(200, 72%, 47%)"
                   radius={[4, 4, 0, 0]}
                 />
@@ -216,14 +252,14 @@ export default function ManagementDashboard() {
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-muted-foreground">Active Warranty</span>
                   <span className="text-success font-medium">
-                    {complaints.length - warrantyExpired}
+                    {(dashboard?.total_complaints || 0) - (dashboard?.warranty_expired || 0)}
                   </span>
                 </div>
                 <div className="h-2 bg-secondary rounded-full overflow-hidden">
                   <div
                     className="h-full bg-success rounded-full"
                     style={{
-                      width: `${((complaints.length - warrantyExpired) / complaints.length) * 100}%`,
+                      width: `${dashboard?.total_complaints ? (((dashboard.total_complaints - (dashboard.warranty_expired || 0)) / dashboard.total_complaints) * 100) : 0}%`,
                     }}
                   />
                 </div>
@@ -232,14 +268,14 @@ export default function ManagementDashboard() {
                 <div className="flex justify-between text-xs mb-1">
                   <span className="text-muted-foreground">Expired</span>
                   <span className="text-destructive font-medium">
-                    {warrantyExpired}
+                    {dashboard?.warranty_expired || 0}
                   </span>
                 </div>
                 <div className="h-2 bg-secondary rounded-full overflow-hidden">
                   <div
                     className="h-full bg-destructive rounded-full"
                     style={{
-                      width: `${(warrantyExpired / complaints.length) * 100}%`,
+                      width: `${dashboard?.total_complaints ? ((dashboard.warranty_expired || 0) / dashboard.total_complaints) * 100 : 0}%`,
                     }}
                   />
                 </div>
@@ -254,7 +290,7 @@ export default function ManagementDashboard() {
               <AlertTriangle className="h-5 w-5 text-warning" />
               <div>
                 <p className="text-2xl font-display font-bold text-foreground">
-                  87%
+                  {dashboard?.sla_performance || 87}%
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Cases resolved within SLA
