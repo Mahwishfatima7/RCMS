@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/lib/auth-context";
@@ -32,8 +32,68 @@ export default function AgentNewComplaint() {
     issueDescription: "",
   });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [complaintNumber, setComplaintNumber] = useState("");
+  const [duplicateComplaintError, setDuplicateComplaintError] = useState("");
+  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
-  // Validation helpers
+  // Debounced serial validation
+  useEffect(() => {
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    if (serialNo.length === 0) {
+      setSerialStatus(null);
+      setSerialEntry(null);
+      return;
+    }
+
+    // Set debounce timer for serial validation
+    debounceTimer.current = setTimeout(async () => {
+      setValidating(true);
+      setDuplicateComplaintError("");
+      try {
+        const result = await serialApi.validate(serialNo);
+        if (result.success && result.data.exists) {
+          const serial = result.data.serial;
+          setSerialEntry({
+            serial_number: serial.serial_number,
+            item_no: serial.item_no,
+            item_description: serial.item_description,
+          });
+          setSerialStatus("valid");
+
+          // Check if a complaint already exists for this serial number
+          const complaintsResult = await complaintApi.getAll();
+          if (complaintsResult.success) {
+            const existingComplaint = complaintsResult.data?.complaints?.find(
+              (c: any) => c.serial_no === serialNo && c.status !== "Rejected"
+            );
+            if (existingComplaint) {
+              setDuplicateComplaintError(
+                `⚠ Complaint already registered for this camera (Ticket: ${existingComplaint.ticket_no})`
+              );
+            }
+          }
+        } else {
+          setSerialStatus("not-found");
+          setSerialEntry(null);
+        }
+      } catch (error) {
+        setSerialStatus("not-found");
+        setSerialEntry(null);
+      } finally {
+        setValidating(false);
+      }
+    }, 500); // 500ms debounce
+
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, [serialNo]);
   const validateCustomerName = (name: string) => {
     if (!name.trim()) return "Full name is required";
     if (name.trim().length < 2) return "Name must be at least 2 characters";
@@ -76,24 +136,8 @@ export default function AgentNewComplaint() {
     }));
   };
 
-  const handleSerialChange = (val: string) => {
+  const handleSerialInput = (val: string) => {
     setSerialNo(val);
-    // TODO: Enable serial validation API once backend has serial data
-    // For now, accept any serial number without backend validation
-    if (val.length > 0) {
-      setSerialEntry({
-        serial_no: val,
-        model: "Camera Model",
-        purchase_date: new Date().toISOString().split("T")[0],
-        warranty_expiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
-          .toISOString()
-          .split("T")[0],
-      });
-      setSerialStatus("valid");
-    } else {
-      setSerialStatus(null);
-      setSerialEntry(null);
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -124,17 +168,24 @@ export default function AgentNewComplaint() {
         customerPhone: form.customerPhone,
         customerEmail: form.customerEmail,
         customerAddress: form.customerAddress,
-        serialNo: serialEntry.serial_no,
-        deviceModel: serialEntry.model,
+        serialNo: serialEntry.serial_number,
+        deviceModel: serialEntry.item_description,
         issueDescription: form.issueDescription,
-        purchaseDate: serialEntry.purchase_date,
       });
 
       if (result.success) {
+        const ticketNo = result.data?.complaint?.ticket_no || "Unknown";
+        setComplaintNumber(ticketNo);
+        setShowSuccessModal(true);
         toast.success("Complaint submitted successfully!");
-        navigate("/agent/tickets");
       } else {
-        toast.error(result.error || "Failed to submit complaint");
+        // Handle duplicate complaint error
+        if (result.error && result.error.includes("already registered")) {
+          setDuplicateComplaintError(result.error);
+          toast.error(result.error);
+        } else {
+          toast.error(result.error || "Failed to submit complaint");
+        }
       }
     } catch (error) {
       toast.error("An error occurred while submitting");
@@ -146,12 +197,14 @@ export default function AgentNewComplaint() {
   return (
     <AppLayout>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-        <h1 className="font-display text-2xl font-bold mb-1">
-          New Replacement Request
-        </h1>
-        <p className="text-sm text-muted-foreground mb-6">
-          Submit a camera replacement complaint for a customer
-        </p>
+        <div className="mb-6">
+          <h1 className="font-display text-2xl font-bold mb-1">
+            New Replacement Request
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Submit a camera replacement complaint for a customer
+          </p>
+        </div>
 
         <form onSubmit={handleSubmit} className="max-w-3xl space-y-6">
           {/* Serial Validation */}
@@ -171,8 +224,8 @@ export default function AgentNewComplaint() {
                 <input
                   type="text"
                   value={serialNo}
-                  onChange={(e) => handleSerialChange(e.target.value)}
-                  placeholder="e.g. CAM-2024-001"
+                  onChange={(e) => handleSerialInput(e.target.value)}
+                  placeholder="AK-XXXX-XXXXX"
                   disabled={validating}
                   className="w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all disabled:opacity-50"
                 />
@@ -201,7 +254,12 @@ export default function AgentNewComplaint() {
               )}
               {serialStatus === "valid" && (
                 <p className="text-xs text-success mt-1">
-                  ✓ Device verified as DXB-supplied, warranty active
+                  ✓ Device verified
+                </p>
+              )}
+              {duplicateComplaintError && (
+                <p className="text-xs text-warning mt-1">
+                  {duplicateComplaintError}
                 </p>
               )}
             </div>
@@ -210,28 +268,20 @@ export default function AgentNewComplaint() {
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
-                className="grid grid-cols-3 gap-3 p-3 bg-secondary/30 rounded-lg"
+                className="grid grid-cols-2 gap-3 p-3 bg-secondary/30 rounded-lg"
               >
                 <div>
-                  <p className="text-[10px] text-muted-foreground">Model</p>
+                  <p className="text-[10px] text-muted-foreground">Item Number</p>
                   <p className="text-xs font-medium text-foreground">
-                    {serialEntry.model}
+                    {serialEntry.item_no}
                   </p>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground">
-                    Purchase Date
+                    Item Description
                   </p>
                   <p className="text-xs font-medium text-foreground">
-                    {serialEntry.purchase_date}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground">
-                    Warranty Expiry
-                  </p>
-                  <p className="text-xs font-medium text-foreground">
-                    {serialEntry.warranty_expiry}
+                    {serialEntry.item_description}
                   </p>
                 </div>
               </motion.div>
@@ -345,6 +395,44 @@ export default function AgentNewComplaint() {
             )}
           </button>
         </form>
+
+        {/* Success Modal */}
+        {showSuccessModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="glass-card rounded-2xl p-8 max-w-sm w-full mx-4"
+            >
+              <div className="flex items-center justify-center mb-4">
+                <CheckCircle className="h-12 w-12 text-success" />
+              </div>
+              <h2 className="font-display font-bold text-lg text-center mb-2">
+                Complaint Submitted Successfully
+              </h2>
+              <p className="text-sm text-muted-foreground text-center mb-6">
+                Your complaint has been registered in the system
+              </p>
+              <div className="bg-secondary/30 rounded-lg p-4 mb-6">
+                <p className="text-xs text-muted-foreground mb-1">
+                  COMPLAINT NUMBER
+                </p>
+                <p className="text-xl font-mono font-bold text-primary">
+                  {complaintNumber}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  navigate("/agent/tickets");
+                }}
+                className="w-full px-4 py-3 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 transition-all"
+              >
+                View My Tickets
+              </button>
+            </motion.div>
+          </div>
+        )}
       </motion.div>
     </AppLayout>
   );

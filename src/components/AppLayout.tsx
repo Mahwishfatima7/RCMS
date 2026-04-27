@@ -1,6 +1,7 @@
 import { useState, ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
+import { ChangePasswordDialog } from '@/components/ChangePasswordDialog';
 import dxbLogo from '@/assets/dxb-logo.png';
 import {
   LayoutDashboard, FileText, PlusCircle, ClipboardList,
@@ -28,6 +29,7 @@ const navItems = {
   management: [
     { label: 'Dashboard', path: '/management/dashboard', icon: LayoutDashboard },
     { label: 'Reports', path: '/management/reports', icon: BarChart3 },
+    { label: 'Register New Agent', path: '/management/register-agent', icon: PlusCircle },
   ],
 };
 
@@ -85,11 +87,19 @@ export function AppLayout({ children }: { children: ReactNode }) {
               <p className="text-[10px] text-muted-foreground">{roleLabel}</p>
             </div>
           </div>
-          <button onClick={() => setShowSignOutDialog(true)}
-            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-destructive transition-colors w-full px-2 py-1.5 rounded hover:bg-destructive/10">
-            <LogOut className="h-3.5 w-3.5" />
-            Sign Out
-          </button>
+          <div className="space-y-1.5">
+            {/* Change Password Button (above Sign Out) */}
+            {user.role === 'agent' && (
+              <div className="pb-1.5">
+                <ChangePasswordDialog />
+              </div>
+            )}
+            <button onClick={() => setShowSignOutDialog(true)}
+              className="flex items-center gap-2 text-xs text-muted-foreground hover:text-destructive transition-colors w-full px-2 py-1.5 rounded hover:bg-destructive/10">
+              <LogOut className="h-3.5 w-3.5" />
+              Sign Out
+            </button>
+          </div>
         </div>
       </aside>
 

@@ -492,22 +492,15 @@ export default function AdminComplaints() {
                           ["Email", selectedComplaint.customer_email],
                           ["Address", selectedComplaint.customer_address],
                           ["Serial", selectedComplaint.serial_no],
-                          ["Model", selectedComplaint.device_model],
-                          ["Purchase Date", selectedComplaint.purchase_date],
+                          ["Item Number", selectedComplaint.item_no],
                           [
-                            "Warranty Expiry",
-                            selectedComplaint.warranty_expiry,
-                          ],
-                          [
-                            "Warranty",
-                            selectedComplaint.warranty_valid
-                              ? "✓ Active"
-                              : "✗ Expired",
+                            "Item Description",
+                            selectedComplaint.item_description,
                           ],
                         ].map(([l, v]) => (
                           <div key={l}>
                             <p className="text-xs text-muted-foreground">{l}</p>
-                            <p className="text-foreground font-medium">{v}</p>
+                            <p className="text-foreground font-medium">{v || "—"}</p>
                           </div>
                         ))}
                       </div>

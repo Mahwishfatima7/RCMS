@@ -117,10 +117,12 @@ export default function ManagementDashboard() {
   return (
     <AppLayout>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-        <h1 className="font-display text-2xl font-bold mb-1">Dashboard</h1>
-        <p className="text-sm text-muted-foreground mb-6">
-          RCMS Overview & Analytics
-        </p>
+        <div className="mb-6">
+          <h1 className="font-display text-2xl font-bold mb-1">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            RCMS Overview & Analytics
+          </p>
+        </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
           <StatCard

@@ -11,6 +11,7 @@ import AdminComplaints from "./pages/AdminComplaints";
 import AdminBookings from "./pages/AdminBookings";
 import ManagementDashboard from "./pages/ManagementDashboard";
 import ManagementReports from "./pages/ManagementReports";
+import RegisterAgent from "./pages/RegisterAgent";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +42,7 @@ function AppRoutes() {
       <Route path="/admin/bookings" element={<AdminBookings />} />
       <Route path="/management/dashboard" element={<ManagementDashboard />} />
       <Route path="/management/reports" element={<ManagementReports />} />
+      <Route path="/management/register-agent" element={<RegisterAgent />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
