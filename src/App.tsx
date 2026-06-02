@@ -7,10 +7,12 @@ import { AuthProvider, useAuth } from "@/lib/auth-context";
 import LoginPage from "./pages/LoginPage";
 import AgentNewComplaint from "./pages/AgentNewComplaint";
 import AgentTickets from "./pages/AgentTickets";
+import AgentAllTicketsWithSLA from "./pages/AgentAllTicketsWithSLA";
 import AdminComplaints from "./pages/AdminComplaints";
 import AdminBookings from "./pages/AdminBookings";
 import ManagementDashboard from "./pages/ManagementDashboard";
 import ManagementReports from "./pages/ManagementReports";
+import ManagersList from "./pages/ManagersList";
 import RegisterAgent from "./pages/RegisterAgent";
 import NotFound from "./pages/NotFound";
 
@@ -38,10 +40,12 @@ function AppRoutes() {
       } />
       <Route path="/agent/new" element={<AgentNewComplaint />} />
       <Route path="/agent/tickets" element={<AgentTickets />} />
+      <Route path="/agent/all-tickets" element={<AgentAllTicketsWithSLA />} />
       <Route path="/admin/complaints" element={<AdminComplaints />} />
       <Route path="/admin/bookings" element={<AdminBookings />} />
       <Route path="/management/dashboard" element={<ManagementDashboard />} />
       <Route path="/management/reports" element={<ManagementReports />} />
+      <Route path="/management/managers" element={<ManagersList />} />
       <Route path="/management/register-agent" element={<RegisterAgent />} />
       <Route path="*" element={<NotFound />} />
     </Routes>

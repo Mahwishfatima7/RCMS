@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { StatusBadge } from "@/components/StatusBadge";
+import { SLAStatusBadge } from "@/components/SLAStatusBadge";
+import { SLAInfoComponent } from "@/components/SLAInfoComponent";
 import { complaintApi, bookingApi } from "@/services/apiService";
 import { motion } from "framer-motion";
 import {
@@ -12,8 +14,10 @@ import {
   Edit,
   Trash2,
   AlertCircle,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { usePollingWithSmoothLoading } from "@/hooks/usePolling";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,11 +31,34 @@ import {
 export default function AdminComplaints() {
   const [search, setSearch] = useState("");
   const [selectedComplaint, setSelectedComplaint] = useState<any>(null);
+  const [selectedComplaintSLA, setSelectedComplaintSLA] = useState<any>(null);
   const [showBooking, setShowBooking] = useState(false);
   const [complaints, setComplaints] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  const getSLAInfo = (complaint: any) => {
+    if (!complaint.sla_deadline) return null;
+
+    const deadline = new Date(complaint.sla_deadline);
+    const now = new Date();
+    const timeRemaining = (deadline.getTime() - now.getTime()) / (1000 * 60 * 60);
+    const totalDuration = complaint.sla_duration || 48;
+    const percentageUsed = Math.max(
+      0,
+      Math.min(100, 100 - (timeRemaining / totalDuration) * 100)
+    );
+
+    return {
+      slaStatus: complaint.sla_status || "Within SLA",
+      slaDeadline: complaint.sla_deadline,
+      timeRemaining,
+      percentageUsed,
+      priority: complaint.priority || "medium",
+      slaDuration: complaint.sla_duration || 48,
+    };
+  };
   const [bookingForm, setBookingForm] = useState({
     booking_id: "",
     booked_date: "",
@@ -120,8 +147,7 @@ export default function AdminComplaints() {
           setBookings(bookingResult.data?.bookings || []);
         }
       } catch (error) {
-        console.error("Failed to fetch complaints:", error);
-        toast.error("Failed to load complaints");
+                toast.error("Failed to load complaints");
       } finally {
         setLoading(false);
       }
@@ -130,11 +156,51 @@ export default function AdminComplaints() {
     fetchComplaints();
   }, []);
 
+  const fetchComplaintsForPolling = async () => {
+    try {
+      // Refresh SLA statuses first
+      await complaintApi.refreshAllSLAStatuses();
+      
+      // Then fetch all updated complaints and bookings
+      const result = await complaintApi.getAll();
+      const bookingResult = await bookingApi.getAll();
+
+      if (result.success) {
+        setComplaints(result.data?.complaints || []);
+      }
+      if (bookingResult.success) {
+        setBookings(bookingResult.data?.bookings || []);
+      }
+    } catch (error) {
+          }
+  };
+
+  usePollingWithSmoothLoading(
+    fetchComplaintsForPolling,
+    60000, // 60 seconds - increased to reduce API load
+    true, // enabled
+    () => setLoading(false),
+    () => {} // Silent updates
+  );
+
   const filtered = complaints.filter(
     (c) =>
       c.ticket_no?.toLowerCase().includes(search.toLowerCase()) ||
       c.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
-      c.serial_no?.toLowerCase().includes(search.toLowerCase()),
+      c.serial_no?.toLowerCase().includes(search.toLowerCase()) ||
+      c.agent_name?.toLowerCase().includes(search.toLowerCase()) ||
+      c.agent_email?.toLowerCase().includes(search.toLowerCase()) ||
+      c.customer_phone?.toLowerCase().includes(search.toLowerCase()) ||
+      c.customer_email?.toLowerCase().includes(search.toLowerCase()) ||
+      c.customer_address?.toLowerCase().includes(search.toLowerCase()) ||
+      c.customer_account_no?.toLowerCase().includes(search.toLowerCase()) ||
+      c.device_model?.toLowerCase().includes(search.toLowerCase()) ||
+      c.item_no?.toLowerCase().includes(search.toLowerCase()) ||
+      c.item_description?.toLowerCase().includes(search.toLowerCase()) ||
+      c.issue_description?.toLowerCase().includes(search.toLowerCase()) ||
+      c.priority?.toLowerCase().includes(search.toLowerCase()) ||
+      c.status?.toLowerCase().includes(search.toLowerCase()) ||
+      c.sla_status?.toLowerCase().includes(search.toLowerCase()),
   );
 
   // Format date in Dubai timezone (GST = UTC+4)
@@ -371,7 +437,7 @@ export default function AdminComplaints() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search complaints..."
+            placeholder="Search any column..."
             className="w-full pl-9 pr-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
           />
         </div>
@@ -383,16 +449,21 @@ export default function AdminComplaints() {
                 {[
                   "Ticket #",
                   "Agent",
+                  "Agent Email",
                   "Customer",
+                  "Account No",
                   "Serial",
+                  "Priority",
+                  "SLA Status",
                   "Status",
-                  "Mfg Booking",
                   "Date",
-                  "",
+                  "Actions",
                 ].map((h) => (
                   <th
                     key={h}
-                    className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                    className={`text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide ${
+                      h === "Actions" ? "w-20 text-center" : ""
+                    }`}
                   >
                     {h}
                   </th>
@@ -400,9 +471,7 @@ export default function AdminComplaints() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((c, i) => {
-                const mfg = getManufacturerUpdate(c.id);
-                return (
+              {filtered.map((c, i) => (
                   <motion.tr
                     key={c.id}
                     initial={{ opacity: 0 }}
@@ -416,32 +485,46 @@ export default function AdminComplaints() {
                     <td className="px-4 py-3 text-muted-foreground text-xs">
                       {c.agent_name || "—"}
                     </td>
+                    <td className="px-4 py-3 text-muted-foreground text-xs">
+                      {c.agent_email || "—"}
+                    </td>
                     <td className="px-4 py-3 text-foreground">
                       {c.customer_name}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                      {c.customer_account_no || "—"}
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                       {c.serial_no}
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={c.status} />
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                        c.priority === 'critical' ? 'bg-red-500/20 text-red-600' :
+                        c.priority === 'high' ? 'bg-orange-500/20 text-orange-600' :
+                        c.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-600' :
+                        'bg-blue-500/20 text-blue-600'
+                      }`}>
+                        {c.priority?.charAt(0).toUpperCase() + c.priority?.slice(1) || 'Medium'}
+                      </span>
                     </td>
-                    <td className="px-4 py-3 text-xs">
-                      {mfg ? (
-                        <span className="text-success">{mfg.booking_id}</span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                    <td className="px-4 py-3">
+                      <SLAStatusBadge status={c.sla_status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={c.status} />
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
                       {formatDubaiDate(c.created_at)}
                     </td>
-                    <td className="px-4 py-3 flex gap-1">
+                    <td className="px-4 py-3 w-20 flex gap-1 justify-center">
                       <button
                         onClick={() => {
                           setSelectedComplaint(c);
+                          setSelectedComplaintSLA(getSLAInfo(c));
                           setShowBooking(false);
                         }}
                         className="text-primary hover:text-primary/80"
+                        title="View details"
                       >
                         <Eye className="h-4 w-4" />
                       </button>
@@ -452,13 +535,13 @@ export default function AdminComplaints() {
                           setStatusUpdate(c.status);
                         }}
                         className="text-warning hover:text-warning/80"
+                        title="Add booking"
                       >
                         <BookOpen className="h-4 w-4" />
                       </button>
                     </td>
                   </motion.tr>
-                );
-              })}
+                ))}
             </tbody>
           </table>
         </div>
@@ -466,210 +549,307 @@ export default function AdminComplaints() {
         {selectedComplaint && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm"
-            onClick={() => setSelectedComplaint(null)}
+            onClick={() => {
+              setSelectedComplaint(null);
+              setSelectedComplaintSLA(null);
+            }}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="glass-card rounded-2xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto"
+              className="glass-card rounded-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
-              {!showBooking ? (
-                <>
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="font-display font-bold text-lg">
-                      {selectedComplaint.ticket_no}
-                    </h2>
-                    <StatusBadge status={selectedComplaint.status} />
+              <div className="sticky top-0 bg-background border-b border-border/50 p-6 flex items-center justify-between">
+                <div>
+                  <h2 className="font-display font-bold text-lg">
+                    {selectedComplaint.ticket_no}
+                  </h2>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {selectedComplaint.customer_name}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setSelectedComplaint(null);
+                    setSelectedComplaintSLA(null);
+                  }}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {/* SLA Information */}
+                {selectedComplaintSLA && !showBooking && (
+                  <div>
+                    <h3 className="font-semibold mb-3 text-sm">SLA Information</h3>
+                    <SLAInfoComponent slaInfo={selectedComplaintSLA} />
                   </div>
-                  {!editingComplaint ? (
-                    <>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        {[
-                          ["Agent", selectedComplaint.agent_name],
-                          ["Customer", selectedComplaint.customer_name],
-                          ["Phone", selectedComplaint.customer_phone],
-                          ["Email", selectedComplaint.customer_email],
-                          ["Address", selectedComplaint.customer_address],
-                          ["Serial", selectedComplaint.serial_no],
-                          ["Item Number", selectedComplaint.item_no],
-                          [
-                            "Item Description",
-                            selectedComplaint.item_description,
-                          ],
-                        ].map(([l, v]) => (
-                          <div key={l}>
-                            <p className="text-xs text-muted-foreground">{l}</p>
-                            <p className="text-foreground font-medium">{v || "—"}</p>
-                          </div>
-                        ))}
+                )}
+
+                {/* Ticket Details */}
+                {!showBooking && (
+                  <div>
+                    <h3 className="font-semibold mb-3 text-sm">Ticket Details</h3>
+                    <div className="grid grid-cols-3 gap-3 mb-4">
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">STATUS</p>
+                        <StatusBadge status={selectedComplaint.status} />
                       </div>
-                      <div className="mt-4">
-                        <p className="text-xs text-muted-foreground">
-                          Issue Description
-                        </p>
-                        <p className="text-sm text-foreground mt-1">
-                          {selectedComplaint.issue_description}
-                        </p>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">PRIORITY</p>
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                          selectedComplaint.priority === 'critical' ? 'bg-red-500/20 text-red-600' :
+                          selectedComplaint.priority === 'high' ? 'bg-orange-500/20 text-orange-600' :
+                          selectedComplaint.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-600' :
+                          'bg-blue-500/20 text-blue-600'
+                        }`}>
+                          {selectedComplaint.priority?.charAt(0).toUpperCase() + selectedComplaint.priority?.slice(1) || 'Medium'}
+                        </span>
                       </div>
-                      {getManufacturerUpdate(selectedComplaint.id) && (
-                        <div className="mt-4 p-3 bg-secondary/30 rounded-lg">
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-xs font-medium text-primary">
-                              Manufacturer Booking
-                            </p>
-                            <div className="flex gap-1">
-                              <button
-                                onClick={handleEditBooking}
-                                className="p-1 text-primary hover:bg-secondary/50 rounded"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  const booking = getManufacturerUpdate(
-                                    selectedComplaint.id,
-                                  );
-                                  if (booking) handleDeleteBooking(booking.id);
-                                }}
-                                className="p-1 text-destructive hover:bg-secondary/50 rounded"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </div>
-                          {(() => {
-                            const m = getManufacturerUpdate(
-                              selectedComplaint.id,
-                            )!;
-                            return (
-                              <div className="grid grid-cols-2 gap-3 text-sm">
-                                <div>
-                                  <p className="text-[10px] text-muted-foreground">
-                                    Booking ID
-                                  </p>
-                                  <p className="text-foreground">
-                                    {m.booking_id}
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-[10px] text-muted-foreground">
-                                    Status
-                                  </p>
-                                  <p className="text-foreground">
-                                    {m.manufacturer_status}
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-[10px] text-muted-foreground">
-                                    Reference
-                                  </p>
-                                  <p className="text-foreground">
-                                    {m.reference_no}
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-[10px] text-muted-foreground">
-                                    Notes
-                                  </p>
-                                  <p className="text-foreground">{m.notes}</p>
-                                </div>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      )}
-                      <div className="mt-5 flex gap-2">
-                        <button
-                          onClick={handleEditComplaint}
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-all"
-                        >
-                          <Edit className="h-4 w-4" /> Edit
-                        </button>
-                        <button
-                          onClick={() =>
-                            handleDeleteComplaint(selectedComplaint.id)
-                          }
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:opacity-90 transition-all"
-                        >
-                          <Trash2 className="h-4 w-4" /> Delete
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedComplaint(selectedComplaint);
-                            setShowBooking(true);
-                          }}
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-secondary text-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
-                        >
-                          <BookOpen className="h-4 w-4" /> Add Booking
-                        </button>
+                      <div>
+                        <p className="text-xs text-muted-foreground mb-1">SLA STATUS</p>
+                        <SLAStatusBadge status={selectedComplaint.sla_status} />
                       </div>
-                    </>
-                  ) : (
-                    <>
-                      <h3 className="font-display font-semibold text-sm mb-4">
-                        Edit Issue Description
-                      </h3>
-                      <div className="space-y-4">
+                    </div>
+                  </div>
+                )}
+
+                {!showBooking ? (
+                  <>
+                    {/* Agent & Metadata */}
+                    <div>
+                      <h3 className="font-semibold mb-3 text-sm">Agent Information</h3>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
                         <div>
-                          <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Issue Description *
-                          </label>
-                          <textarea
-                            value={editComplaintForm.issue_description}
-                            onChange={(e) =>
-                              handleComplaintFieldChange("issue_description", e.target.value)
-                            }
-                            placeholder="Describe the issue..."
-                            rows={6}
-                            className={`mt-1 w-full px-3 py-2.5 bg-secondary/50 border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-all ${
-                              complaintFieldErrors.issue_description
-                                ? "border-red-500/50 focus:ring-red-500/50"
-                                : "border-border/50 focus:ring-primary/50"
-                            }`}
-                          />
-                          {complaintFieldErrors.issue_description && (
-                            <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1">
-                              <AlertCircle className="h-3 w-3" />
-                              {complaintFieldErrors.issue_description}
-                            </p>
-                          )}
+                          <p className="text-xs text-muted-foreground mb-1">AGENT</p>
+                          <p>{selectedComplaint.agent_name || "—"}</p>
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          Note: Customer information cannot be edited. Contact
-                          the agent or administrator to modify customer details.
-                        </p>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">CREATED</p>
+                          <p className="text-xs font-mono">
+                            {new Date(selectedComplaint.created_at).toLocaleString()}
+                          </p>
+                        </div>
                       </div>
-                      <div className="mt-5 flex gap-2">
-                        <button
-                          onClick={handleSaveComplaint}
-                          disabled={submitting}
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-all disabled:opacity-50"
-                        >
-                          {submitting ? (
-                            <>
-                              <Loader className="h-4 w-4 animate-spin" />{" "}
-                              Saving...
-                            </>
-                          ) : (
-                            <>
-                              <Save className="h-4 w-4" /> Save Changes
-                            </>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => setEditingComplaint(false)}
-                          className="flex-1 px-4 py-2 rounded-lg bg-secondary text-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
-                        >
-                          Cancel
-                        </button>
+                    </div>
+
+                    {/* Customer Information */}
+                    <div>
+                      <h3 className="font-semibold mb-3 text-sm">Customer Information</h3>
+                      <div className="space-y-2 text-sm">
+                        <div>
+                          <p className="text-xs text-muted-foreground">NAME</p>
+                          <p>{selectedComplaint.customer_name}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">PHONE</p>
+                          <p>{selectedComplaint.customer_phone}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">EMAIL</p>
+                          <p className="break-all">{selectedComplaint.customer_email}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">ADDRESS</p>
+                          <p>{selectedComplaint.customer_address}</p>
+                        </div>
+                        {selectedComplaint.customer_account_no && (
+                          <div>
+                            <p className="text-xs text-muted-foreground">ACCOUNT NUMBER</p>
+                            <p className="font-mono">{selectedComplaint.customer_account_no}</p>
+                          </div>
+                        )}
                       </div>
-                    </>
-                  )}
-                </>
-              ) : (
-                <>
-                  {!editingBooking ? (
+                    </div>
+
+                    {/* Device Information */}
+                    <div>
+                      <h3 className="font-semibold mb-3 text-sm">Device Information</h3>
+                      <div className="space-y-2 text-sm">
+                        <div>
+                          <p className="text-xs text-muted-foreground">SERIAL NO</p>
+                          <p className="font-mono text-primary">{selectedComplaint.serial_no}</p>
+                        </div>
+                        {selectedComplaint.item_no && (
+                          <div>
+                            <p className="text-xs text-muted-foreground">ITEM NO</p>
+                            <p className="font-mono">{selectedComplaint.item_no}</p>
+                          </div>
+                        )}
+                        {selectedComplaint.item_description && (
+                          <div>
+                            <p className="text-xs text-muted-foreground">ITEM DESCRIPTION</p>
+                            <p>{selectedComplaint.item_description}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Issue Description */}
+                    <div>
+                      <h3 className="font-semibold mb-3 text-sm">ISSUE DESCRIPTION</h3>
+                      <p className="text-sm text-muted-foreground bg-secondary/20 p-3 rounded-lg">
+                        {selectedComplaint.issue_description}
+                      </p>
+                    </div>
+
+                    {!editingComplaint ? (
+                      <>
+                        {getManufacturerUpdate(selectedComplaint.id) && (
+                          <div className="mt-4 p-3 bg-secondary/30 rounded-lg">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-xs font-medium text-primary">
+                                Manufacturer Booking
+                              </p>
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={handleEditBooking}
+                                  className="p-1 text-primary hover:bg-secondary/50 rounded"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const booking = getManufacturerUpdate(
+                                      selectedComplaint.id,
+                                    );
+                                    if (booking) handleDeleteBooking(booking.id);
+                                  }}
+                                  className="p-1 text-destructive hover:bg-secondary/50 rounded"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+                            {(() => {
+                              const m = getManufacturerUpdate(
+                                selectedComplaint.id,
+                              )!;
+                              return (
+                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                  <div>
+                                    <p className="text-[10px] text-muted-foreground">
+                                      Booking ID
+                                    </p>
+                                    <p className="text-foreground">
+                                      {m.booking_id}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] text-muted-foreground">
+                                      Status
+                                    </p>
+                                    <p className="text-foreground">
+                                      {m.manufacturer_status}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] text-muted-foreground">
+                                      Reference
+                                    </p>
+                                    <p className="text-foreground">
+                                      {m.reference_no}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] text-muted-foreground">
+                                      Notes
+                                    </p>
+                                    <p className="text-foreground">{m.notes}</p>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
+                        <div className="mt-5 flex gap-2">
+                          <button
+                            onClick={() =>
+                              handleDeleteComplaint(selectedComplaint.id)
+                            }
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium hover:opacity-90 transition-all"
+                          >
+                            <Trash2 className="h-4 w-4" /> Delete
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedComplaint(selectedComplaint);
+                              setShowBooking(true);
+                            }}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-secondary text-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
+                          >
+                            <BookOpen className="h-4 w-4" /> Add Booking
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <h3 className="font-display font-semibold text-sm mb-4">
+                          Edit Issue Description
+                        </h3>
+                        <div className="space-y-4">
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                              Issue Description *
+                            </label>
+                            <textarea
+                              value={editComplaintForm.issue_description}
+                              onChange={(e) =>
+                                handleComplaintFieldChange("issue_description", e.target.value)
+                              }
+                              placeholder="Describe the issue..."
+                              rows={6}
+                              className={`mt-1 w-full px-3 py-2.5 bg-secondary/50 border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-all ${
+                                complaintFieldErrors.issue_description
+                                  ? "border-red-500/50 focus:ring-red-500/50"
+                                  : "border-border/50 focus:ring-primary/50"
+                              }`}
+                            />
+                            {complaintFieldErrors.issue_description && (
+                              <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1">
+                                <AlertCircle className="h-3 w-3" />
+                                {complaintFieldErrors.issue_description}
+                              </p>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Note: Customer information cannot be edited. Contact
+                            the agent or administrator to modify customer details.
+                          </p>
+                        </div>
+                        <div className="mt-5 flex gap-2">
+                          <button
+                            onClick={handleSaveComplaint}
+                            disabled={submitting}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-all disabled:opacity-50"
+                          >
+                            {submitting ? (
+                              <>
+                                <Loader className="h-4 w-4 animate-spin" />{" "}
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Save className="h-4 w-4" /> Save Changes
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => setEditingComplaint(false)}
+                            className="flex-1 px-4 py-2 rounded-lg bg-secondary text-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {!editingBooking ? (
                     <>
                       <h2 className="font-display font-bold text-lg mb-4">
                         Manufacturer Booking — {selectedComplaint.ticket_no}
@@ -754,7 +934,6 @@ export default function AdminComplaints() {
                             className="mt-1 w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
                           >
                             <option>Pending</option>
-                            <option>Booked</option>
                             <option>In-Progress</option>
                             <option>Replaced</option>
                             <option>Rejected</option>
@@ -877,6 +1056,8 @@ export default function AdminComplaints() {
                 </>
               )}
 
+              </div>
+
               <button
                 onClick={() => setSelectedComplaint(null)}
                 className="mt-5 w-full py-2 rounded-lg bg-secondary text-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
@@ -932,5 +1113,6 @@ export default function AdminComplaints() {
         </AlertDialog>
       </motion.div>
     </AppLayout>
-  );
+  ); 
 }
+

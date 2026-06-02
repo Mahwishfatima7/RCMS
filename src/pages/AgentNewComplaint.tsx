@@ -29,7 +29,9 @@ export default function AgentNewComplaint() {
     customerPhone: "",
     customerEmail: "",
     customerAddress: "",
+    customerAccountNo: "",
     issueDescription: "",
+    priority: "medium" as "low" | "medium" | "high" | "critical",
   });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -108,7 +110,8 @@ export default function AgentNewComplaint() {
   };
 
   const validateCustomerEmail = (email: string) => {
-    if (email.trim() && (!email.includes("@") || !email.includes("."))) {
+    if (!email.trim()) return "Email is required";
+    if (!email.includes("@") || !email.includes(".")) {
       return "Please enter a valid email address";
     }
     return "";
@@ -120,6 +123,11 @@ export default function AgentNewComplaint() {
     return "";
   };
 
+  const validateCustomerAccountNo = (accountNo: string) => {
+    if (!accountNo.trim()) return "Account number is required";
+    return "";
+  };
+
   // Handle field changes with validation
   const handleFieldChange = (key: string, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -128,6 +136,7 @@ export default function AgentNewComplaint() {
     if (key === "customerName") error = validateCustomerName(value);
     else if (key === "customerPhone") error = validateCustomerPhone(value);
     else if (key === "customerEmail") error = validateCustomerEmail(value);
+    else if (key === "customerAccountNo") error = validateCustomerAccountNo(value);
     else if (key === "issueDescription") error = validateIssueDescription(value);
 
     setFieldErrors((prev) => ({
@@ -149,6 +158,7 @@ export default function AgentNewComplaint() {
       customerName: validateCustomerName(form.customerName),
       customerPhone: validateCustomerPhone(form.customerPhone),
       customerEmail: validateCustomerEmail(form.customerEmail),
+      customerAccountNo: validateCustomerAccountNo(form.customerAccountNo),
       issueDescription: validateIssueDescription(form.issueDescription),
     };
 
@@ -168,9 +178,11 @@ export default function AgentNewComplaint() {
         customerPhone: form.customerPhone,
         customerEmail: form.customerEmail,
         customerAddress: form.customerAddress,
+        customerAccountNo: form.customerAccountNo,
         serialNo: serialEntry.serial_number,
         deviceModel: serialEntry.item_description,
         issueDescription: form.issueDescription,
+        priority: form.priority,
       });
 
       if (result.success) {
@@ -226,8 +238,7 @@ export default function AgentNewComplaint() {
                   value={serialNo}
                   onChange={(e) => handleSerialInput(e.target.value)}
                   placeholder="AK-XXXX-XXXXX"
-                  disabled={validating}
-                  className="w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all disabled:opacity-50"
+                  className="w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
                 />
                 {validating && (
                   <Loader className="absolute right-3 top-3 h-4 w-4 animate-spin text-primary" />
@@ -307,8 +318,13 @@ export default function AgentNewComplaint() {
                 },
                 {
                   key: "customerEmail",
-                  label: "Email",
+                  label: "Email *",
                   placeholder: "customer@email.com",
+                },
+                {
+                  key: "customerAccountNo",
+                  label: "Account Number *",
+                  placeholder: "e.g., 123456",
                 },
                 {
                   key: "customerAddress",
@@ -316,7 +332,7 @@ export default function AgentNewComplaint() {
                   placeholder: "Full address",
                 },
               ].map((f) => (
-                <div key={f.key}>
+                <div key={f.key} className={f.key === "customerAddress" ? "col-span-2" : ""}>
                   <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                     {f.label}
                   </label>
@@ -374,6 +390,31 @@ export default function AgentNewComplaint() {
                   {fieldErrors.issueDescription}
                 </p>
               )}
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Priority *
+              </label>
+              <select
+                value={form.priority}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    priority: e.target.value as "low" | "medium" | "high" | "critical",
+                  }))
+                }
+                disabled={submitting}
+                className="mt-1 w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all disabled:opacity-50"
+              >
+                <option value="low">Low - 72 hours</option>
+                <option value="medium">Medium - 48 hours</option>
+                <option value="high">High - 24 hours</option>
+                <option value="critical">Critical - 8 hours</option>
+              </select>
+              <p className="text-xs text-muted-foreground mt-1">
+                SLA time available for this priority level
+              </p>
             </div>
           </div>
 

@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.DEV
+﻿const BASE_URL = import.meta.env.DEV
   ? "/api"
   : import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 
@@ -76,8 +76,7 @@ class AuthService {
     } catch (error) {
       const errorMsg =
         error instanceof Error ? error.message : "Registration failed";
-      console.error("Registration error:", errorMsg);
-      return {
+            return {
         success: false,
         error: errorMsg,
       };
@@ -111,8 +110,7 @@ class AuthService {
       return data;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Login failed";
-      console.error("Login error:", errorMsg);
-      return {
+            return {
         success: false,
         error: errorMsg,
       };
@@ -135,8 +133,7 @@ class AuthService {
       const data = await response.json();
       return data.success ? data.data.user : null;
     } catch (error) {
-      console.error("Failed to get current user:", error);
-      return null;
+            return null;
     }
   }
 
@@ -153,8 +150,7 @@ class AuthService {
         });
       }
     } catch (error) {
-      console.error("Logout error:", error);
-    } finally {
+          } finally {
       localStorage.removeItem(this.tokenKey);
       localStorage.removeItem(this.userKey);
     }
@@ -175,3 +171,4 @@ class AuthService {
 }
 
 export const authService = new AuthService();
+

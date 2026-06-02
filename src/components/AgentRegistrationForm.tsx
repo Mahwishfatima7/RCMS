@@ -1,7 +1,9 @@
-import { useState } from "react";
+﻿import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { AlertCircle, Loader, Check, Eye, EyeOff } from "lucide-react";
+import { AlertCircle, Loader, Check, Eye, EyeOff, Copy, CheckCircle2 } from "lucide-react";
+import confetti from "canvas-confetti";
 import { useAuth } from "@/lib/auth-context";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -42,6 +44,7 @@ interface AgentData {
   emergency_contact?: string;
   phone?: string;
   department?: string;
+  manager_name?: string;
   created_at?: string;
 }
 
@@ -52,17 +55,87 @@ export function AgentRegistrationForm({ autoOpen = false }: { autoOpen?: boolean
     email: "",
     contact_no: "",
     emergency_contact: "",
-    password: "",
-    confirmPassword: "",
+    manager_name: "",
   });
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [successData, setSuccessData] = useState<AgentData | null>(null);
   const [successPassword, setSuccessPassword] = useState("");
+  const [passwordCopied, setPasswordCopied] = useState(false);
+  const [generatedPassword, setGeneratedPassword] = useState("");
+  const [managers, setManagers] = useState<string[]>([]);
+  const [managersLoading, setManagersLoading] = useState(false);
   const { user } = useAuth();
+
+  // Generate a strong random password
+  const generatePassword = (): string => {
+    const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const lowercase = "abcdefghijklmnopqrstuvwxyz";
+    const numbers = "0123456789";
+    const symbols = "!@#$%^&*";
+    
+    let password = "";
+    password += uppercase[Math.floor(Math.random() * uppercase.length)];
+    password += lowercase[Math.floor(Math.random() * lowercase.length)];
+    password += numbers[Math.floor(Math.random() * numbers.length)];
+    password += symbols[Math.floor(Math.random() * symbols.length)];
+    
+    const allChars = uppercase + lowercase + numbers + symbols;
+    for (let i = password.length; i < 12; i++) {
+      password += allChars[Math.floor(Math.random() * allChars.length)];
+    }
+    
+    return password.split('').sort(() => Math.random() - 0.5).join('');
+  };
+
+  // Generate password when dialog opens
+  useEffect(() => {
+    if (isOpen && !successData && !generatedPassword) {
+      setGeneratedPassword(generatePassword());
+    }
+  }, [isOpen, successData, generatedPassword]);
+
+  // Fetch managers when dialog opens
+  useEffect(() => {
+    if (isOpen && managers.length === 0) {
+      const fetchManagers = async () => {
+        try {
+          setManagersLoading(true);
+          const token = localStorage.getItem("auth_token");
+          if (!token) return;
+
+          const response = await fetch(`${BASE_URL}/users/managers/list`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            setManagers(data.data || []);
+          }
+        } catch (err) {
+                  } finally {
+          setManagersLoading(false);
+        }
+      };
+
+      fetchManagers();
+    }
+  }, [isOpen, managers.length]);
+
+  // Trigger confetti when agent is created successfully
+  useEffect(() => {
+    if (successData) {
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ["#00d4ff", "#0066ff", "#00ff88", "#ffaa00", "#ff0055"],
+      });
+    }
+  }, [successData]);
 
   const resetForm = () => {
     setFormData({
@@ -70,14 +143,20 @@ export function AgentRegistrationForm({ autoOpen = false }: { autoOpen?: boolean
       email: "",
       contact_no: "",
       emergency_contact: "",
-      password: "",
-      confirmPassword: "",
+      manager_name: "",
     });
     setError("");
     setFieldErrors({});
-    setShowPassword(false);
-    setShowConfirmPassword(false);
     setSuccessPassword("");
+    setPasswordCopied(false);
+    setGeneratedPassword("");
+  };
+
+  const copyPasswordToClipboard = () => {
+    navigator.clipboard.writeText(successPassword);
+    setPasswordCopied(true);
+    toast.success("Password copied to clipboard!");
+    setTimeout(() => setPasswordCopied(false), 2000);
   };
 
   const validateField = (field: string, value: string) => {
@@ -101,20 +180,8 @@ export function AgentRegistrationForm({ autoOpen = false }: { autoOpen?: boolean
         if (!/^[\d\+\-\(\)\s]+$/.test(value))
           return "Please enter a valid contact number";
         return "";
-      case "password":
-        if (!value) return "Password is required";
-        if (value.length < 8) return "Password must be at least 8 characters";
-        if (!/[a-z]/.test(value))
-          return "Password must contain lowercase letter";
-        if (!/[A-Z]/.test(value))
-          return "Password must contain uppercase letter";
-        if (!/[0-9]/.test(value)) return "Password must contain a digit";
-        if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(value))
-          return "Password must contain a special character";
-        return "";
-      case "confirmPassword":
-        if (!value) return "Please confirm your password";
-        if (value !== formData.password) return "Passwords do not match";
+      case "manager_name":
+        if (!value.trim()) return "Manager name is required";
         return "";
       default:
         return "";
@@ -162,11 +229,11 @@ export function AgentRegistrationForm({ autoOpen = false }: { autoOpen?: boolean
         },
         body: JSON.stringify({
           name: formData.name,
-          employee_id: formData.employee_id,
           email: formData.email,
           contact_no: formData.contact_no,
           emergency_contact: formData.emergency_contact,
-          password: formData.password,
+          manager_name: formData.manager_name,
+          password: generatedPassword,
         }),
       });
 
@@ -178,8 +245,7 @@ export function AgentRegistrationForm({ autoOpen = false }: { autoOpen?: boolean
 
       if (data.success && data.data?.agent) {
         setSuccessData(data.data.agent);
-        setSuccessPassword(formData.password);
-        resetForm();
+        setSuccessPassword(generatedPassword);
       }
     } catch (err) {
       setError(
@@ -214,10 +280,19 @@ export function AgentRegistrationForm({ autoOpen = false }: { autoOpen?: boolean
               animate={{ opacity: 1, y: 0 }}
               className="space-y-4 py-4"
             >
-              <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-                <p className="text-sm text-green-600 font-medium">
-                  Agent created successfully!
-                </p>
+              <div className="space-y-2">
+                <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg flex items-center gap-2">
+                  <Check className="h-5 w-5 text-green-600" />
+                  <p className="text-sm text-green-600 font-medium">
+                    Agent created successfully!
+                  </p>
+                </div>
+                <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg flex items-center gap-2">
+                  <Check className="h-5 w-5 text-blue-600" />
+                  <p className="text-sm text-blue-600 font-medium">
+                    Email sent to {successData.email}
+                  </p>
+                </div>
               </div>
 
               <div className="space-y-3 bg-secondary/30 rounded-lg p-4">
@@ -251,6 +326,14 @@ export function AgentRegistrationForm({ autoOpen = false }: { autoOpen?: boolean
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground uppercase">
+                    Manager Name
+                  </label>
+                  <p className="text-sm text-foreground capitalize mt-1">
+                    {successData.manager_name}
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground uppercase">
                     Role
                   </label>
                   <p className="text-sm text-foreground capitalize mt-1">
@@ -261,9 +344,26 @@ export function AgentRegistrationForm({ autoOpen = false }: { autoOpen?: boolean
                   <label className="text-xs font-medium text-muted-foreground uppercase">
                     Password
                   </label>
-                  <p className="text-sm text-foreground mt-1">
-                    {successPassword}
-                  </p>
+                  <div className="mt-2 p-4 bg-amber-500/15 border-2 border-amber-500/40 rounded-lg flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-mono font-bold text-foreground tracking-wide">
+                        {successPassword}
+                      </p>
+                      <p className="text-xs text-amber-600 mt-1">Share this password with the agent securely</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={copyPasswordToClipboard}
+                      className="ml-3 flex-shrink-0 p-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 transition-colors"
+                      title="Copy password"
+                    >
+                      {passwordCopied ? (
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                      ) : (
+                        <Copy className="h-5 w-5 text-amber-600" />
+                      )}
+                    </button>
+                  </div>
                 </div>
                 {successData.created_at && (
                   <div>
@@ -410,79 +510,64 @@ export function AgentRegistrationForm({ autoOpen = false }: { autoOpen?: boolean
                 )}
               </div>
 
-              {/* Password */}
+              {/* Manager Name */}
               <div>
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Password *
+                  Manager Name *
                 </label>
-                <div className="relative mt-1">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={formData.password}
-                    onChange={(e) => handleFieldChange("password", e.target.value)}
-                    placeholder=""
-                    disabled={loading}
-                    className={`w-full px-3 py-2 pr-10 bg-secondary/50 border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-all disabled:opacity-50 ${
-                      fieldErrors.password
-                        ? "border-red-500/50 focus:ring-red-500/50"
-                        : "border-border/50 focus:ring-primary/50"
-                    }`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-                {fieldErrors.password && (
+                <select
+                  value={formData.manager_name}
+                  onChange={(e) => handleFieldChange("manager_name", e.target.value)}
+                  disabled={loading || managersLoading}
+                  className={`mt-1 w-full px-3 py-2 bg-secondary/50 border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 transition-all disabled:opacity-50 ${
+                    fieldErrors.manager_name
+                      ? "border-red-500/50 focus:ring-red-500/50"
+                      : "border-border/50 focus:ring-primary/50"
+                  }`}
+                >
+                  <option value="">{managersLoading ? "Loading managers..." : "Select a manager"}</option>
+                  {managers.map((manager) => (
+                    <option key={manager} value={manager}>
+                      {manager}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.manager_name && (
                   <p className="mt-1 text-xs text-red-500">
-                    {fieldErrors.password}
+                    {fieldErrors.manager_name}
                   </p>
                 )}
               </div>
 
-              {/* Confirm Password */}
+              {/* Password */}
               <div>
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Confirm Password *
+                  Password (Auto-Generated)
                 </label>
-                <div className="relative mt-1">
-                  <input
-                    type={showConfirmPassword ? "text" : "password"}
-                    value={formData.confirmPassword}
-                    onChange={(e) =>
-                      handleFieldChange("confirmPassword", e.target.value)
-                    }
-                    placeholder="Re-enter password"
-                    disabled={loading}
-                    className={`w-full px-3 py-2 pr-10 bg-secondary/50 border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 transition-all disabled:opacity-50 ${
-                      fieldErrors.confirmPassword
-                        ? "border-red-500/50 focus:ring-red-500/50"
-                        : "border-border/50 focus:ring-primary/50"
-                    }`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    {showConfirmPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-                {fieldErrors.confirmPassword && (
-                  <p className="mt-1 text-xs text-red-500">
-                    {fieldErrors.confirmPassword}
-                  </p>
+                {generatedPassword ? (
+                  <div className="mt-1 p-4 bg-amber-500/15 border-2 border-amber-500/40 rounded-lg flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-sm font-mono font-bold text-foreground tracking-wide break-all">
+                        {generatedPassword}
+                      </p>
+                      <p className="text-xs text-amber-600 mt-2">Unique password for this agent</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(generatedPassword);
+                        toast.success("Password copied!");
+                      }}
+                      className="ml-3 flex-shrink-0 p-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 transition-colors"
+                      title="Copy password"
+                    >
+                      <Copy className="h-4 w-4 text-amber-600" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-1 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg animate-pulse">
+                    <p className="text-xs text-blue-600 font-medium">Generating password...</p>
+                  </div>
                 )}
               </div>
 
@@ -520,3 +605,4 @@ export function AgentRegistrationForm({ autoOpen = false }: { autoOpen?: boolean
     </>
   );
 }
+

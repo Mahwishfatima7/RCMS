@@ -1,4 +1,4 @@
-import { authService } from "./authService";
+﻿import { authService } from "./authService";
 
 const BASE_URL = import.meta.env.DEV
   ? "/api"
@@ -26,12 +26,26 @@ function getHeaders(includeAuth = true) {
   return headers;
 }
 
+function buildQueryString(params?: Record<string, any>): string {
+  if (!params) return "";
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      query.append(key, String(value));
+    }
+  });
+  const queryString = query.toString();
+  return queryString ? `?${queryString}` : "";
+}
+
 async function apiCall<T>(
   url: string,
   options: RequestInit = {},
+  queryParams?: Record<string, any>,
 ): Promise<ApiResponse<T>> {
   try {
-    const response = await fetch(`${BASE_URL}${url}`, {
+    const finalUrl = `${BASE_URL}${url}${buildQueryString(queryParams)}`;
+    const response = await fetch(finalUrl, {
       ...options,
       headers: {
         ...getHeaders(true),
@@ -42,8 +56,7 @@ async function apiCall<T>(
     const data = await response.json();
 
     if (!response.ok) {
-      console.error(`API Error [${response.status}]:`, data);
-      return {
+            return {
         success: false,
         error:
           data.error || data.message || `Request failed (${response.status})`,
@@ -54,8 +67,7 @@ async function apiCall<T>(
   } catch (error) {
     const errorMsg =
       error instanceof Error ? error.message : "API request failed";
-    console.error("API Error:", errorMsg);
-    return {
+        return {
       success: false,
       error: errorMsg,
     };
@@ -79,14 +91,24 @@ export const complaintApi = {
   getByAgent: (agentId: number | string) =>
     apiCall<any>(`/complaints/agent/${agentId}`),
 
+  getByManager: (managerName: string, filters?: {
+    limit?: number;
+    offset?: number;
+  }) =>
+    apiCall<any>(`/complaints/manager/${encodeURIComponent(managerName)}`, {
+      method: "GET",
+    }, filters),
+
   create: (data: {
     customerName: string;
     customerEmail: string;
     customerPhone: string;
     customerAddress: string;
+    customerAccountNo: string;
     serialNo: string;
     deviceModel: string;
     issueDescription: string;
+    priority?: string;
     purchaseDate?: string;
   }) =>
     apiCall<any>("/complaints", {
@@ -108,6 +130,31 @@ export const complaintApi = {
 
   delete: (id: number | string) =>
     apiCall<any>(`/complaints/${id}`, { method: "DELETE" }),
+
+  // SLA endpoints
+  getSLAInfo: (id: number | string) =>
+    apiCall<any>(`/complaints/${id}/sla`, { method: "GET" }),
+
+  refreshSLAStatus: (id: number | string) =>
+    apiCall<any>(`/complaints/${id}/sla/refresh`, { method: "POST" }),
+
+  getSLAStatistics: (filters?: {
+    agentId?: number;
+    slaStatus?: string;
+    priority?: string;
+  }) =>
+    apiCall<any>("/complaints/sla/statistics", { method: "GET" }, filters),
+
+  getComplaintsBySLAStatus: (slaStatus: string, filters?: {
+    limit?: number;
+    offset?: number;
+  }) =>
+    apiCall<any>(`/complaints/sla/${encodeURIComponent(slaStatus)}`, {
+      method: "GET",
+    }, filters),
+
+  refreshAllSLAStatuses: () =>
+    apiCall<any>("/complaints/sla/refresh-all", { method: "POST" }),
 };
 
 // ============== BOOKINGS ==============
@@ -175,11 +222,22 @@ export const userApi = {
 
   delete: (id: number | string) =>
     apiCall<any>(`/users/${id}`, { method: "DELETE" }),
+
+  // Manager endpoints
+  getManagers: () => apiCall<any>("/users/managers"),
+
+  getManagersList: () => apiCall<any>("/users/managers/list"),
 };
 
 // ============== ANALYTICS ==============
 export const analyticsApi = {
   getDashboard: () => apiCall<any>("/analytics/dashboard"),
 
-  getReports: () => apiCall<any>("/analytics/reports"),
+  getReports: (filters?: {
+    status?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    search?: string;
+  }) => apiCall<any>("/analytics/reports", { method: "GET" }, filters),
 };
+

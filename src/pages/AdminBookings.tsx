@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { StatusBadge } from "@/components/StatusBadge";
+import { SLAStatusBadge } from "@/components/SLAStatusBadge";
 import { complaintApi, bookingApi } from "@/services/apiService";
 import { motion } from "framer-motion";
 import { Search, BookOpen, Loader, Edit, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { usePollingWithSmoothLoading } from "@/hooks/usePolling";
 
 export default function AdminBookings() {
   const [search, setSearch] = useState("");
@@ -19,6 +21,7 @@ export default function AdminBookings() {
     manufacturer_status: "",
     reference_no: "",
     notes: "",
+    ticket_status: "",
   });
 
   useEffect(() => {
@@ -44,6 +47,30 @@ export default function AdminBookings() {
     fetchData();
   }, []);
 
+  const fetchDataForPolling = async () => {
+    try {
+      const complaintsResult = await complaintApi.getAll();
+      const bookingsResult = await bookingApi.getAll();
+
+      if (complaintsResult.success) {
+        setComplaints(complaintsResult.data?.complaints || []);
+      }
+      if (bookingsResult.success) {
+        setBookings(bookingsResult.data?.bookings || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch data:", error);
+    }
+  };
+
+  usePollingWithSmoothLoading(
+    fetchDataForPolling,
+    60000, // 60 seconds
+    true, // enabled
+    () => setLoading(false),
+    () => {} // Silent updates
+  );
+
   // Only show complaints that have manufacturer bookings
   const booked = complaints
     .map((c) => ({
@@ -60,12 +87,16 @@ export default function AdminBookings() {
   );
 
   const handleEditBooking = (booking: any) => {
+    // Find the associated complaint to get ticket status
+    const complaint = complaints.find(c => c.id === booking.complaint_id);
+    
     setSelectedBooking(booking);
     setEditForm({
       booking_id: booking.booking_id,
       manufacturer_status: booking.manufacturer_status,
       reference_no: booking.reference_no,
       notes: booking.notes || "",
+      ticket_status: complaint?.status || "",
     });
     setEditingBooking(true);
   };
@@ -74,16 +105,36 @@ export default function AdminBookings() {
     if (!selectedBooking) return;
     setSubmitting(true);
     try {
-      const result = await bookingApi.update(selectedBooking.id, editForm);
+      // Update booking details
+      const bookingData = {
+        booking_id: editForm.booking_id,
+        manufacturer_status: editForm.manufacturer_status,
+        reference_no: editForm.reference_no,
+        notes: editForm.notes,
+      };
+      
+      const result = await bookingApi.update(selectedBooking.id, bookingData);
+      
       if (result.success) {
+        // If ticket status changed, update the complaint status
+        if (editForm.ticket_status) {
+          const complaintId = selectedBooking.complaint_id;
+          await complaintApi.updateStatus(complaintId, editForm.ticket_status);
+        }
+        
         toast.success("Booking updated successfully");
         setEditingBooking(false);
         setSelectedBooking(null);
 
-        // Refresh bookings
+        // Refresh bookings and complaints
         const refreshResult = await bookingApi.getAll();
         if (refreshResult.success) {
           setBookings(refreshResult.data?.bookings || []);
+        }
+        
+        const complaintsResult = await complaintApi.getAll();
+        if (complaintsResult.success) {
+          setComplaints(complaintsResult.data?.complaints || []);
         }
       } else {
         toast.error(result.error || "Failed to update booking");
@@ -157,6 +208,8 @@ export default function AdminBookings() {
                   {[
                     "Ticket #",
                     "Customer",
+                    "Priority",
+                    "SLA Status",
                     "Booking ID",
                     "Booked Date",
                     "Mfg Status",
@@ -188,6 +241,19 @@ export default function AdminBookings() {
                     </td>
                     <td className="px-4 py-3 text-foreground">
                       {c.customer_name}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                        c.priority === 'critical' ? 'bg-red-500/20 text-red-600' :
+                        c.priority === 'high' ? 'bg-orange-500/20 text-orange-600' :
+                        c.priority === 'medium' ? 'bg-yellow-500/20 text-yellow-600' :
+                        'bg-blue-500/20 text-blue-600'
+                      }`}>
+                        {c.priority?.charAt(0).toUpperCase() + c.priority?.slice(1) || 'Medium'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <SLAStatusBadge status={c.sla_status} />
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-success">
                       {b?.booking_id}
@@ -340,6 +406,27 @@ export default function AdminBookings() {
                         />
                       </div>
                     ))}
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        Ticket Status
+                      </label>
+                      <select
+                        value={editForm.ticket_status}
+                        onChange={(e) =>
+                          setEditForm((prev) => ({
+                            ...prev,
+                            ticket_status: e.target.value,
+                          }))
+                        }
+                        className="mt-1 w-full px-3 py-2.5 bg-secondary/50 border border-border/50 rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+                      >
+                        <option value="">Select Status</option>
+                        <option value="Pending">Pending</option>
+                        <option value="In-Progress">In-Progress</option>
+                        <option value="Replaced">Replaced</option>
+                        <option value="Rejected">Rejected</option>
+                      </select>
+                    </div>
                     <div>
                       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Notes

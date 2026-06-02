@@ -5,7 +5,7 @@ import { ChangePasswordDialog } from '@/components/ChangePasswordDialog';
 import dxbLogo from '@/assets/dxb-logo.png';
 import {
   LayoutDashboard, FileText, PlusCircle, ClipboardList,
-  BarChart3, LogOut, ChevronRight,
+  BarChart3, LogOut, ChevronRight, Users,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -21,6 +21,7 @@ const navItems = {
   agent: [
     { label: 'New Complaint', path: '/agent/new', icon: PlusCircle },
     { label: 'My Tickets', path: '/agent/tickets', icon: ClipboardList },
+    { label: 'All Tickets', path: '/agent/all-tickets', icon: FileText },
   ],
   admin: [
     { label: 'All Complaints', path: '/admin/complaints', icon: FileText },
@@ -29,6 +30,7 @@ const navItems = {
   management: [
     { label: 'Dashboard', path: '/management/dashboard', icon: LayoutDashboard },
     { label: 'Reports', path: '/management/reports', icon: BarChart3 },
+    { label: 'Managers and Agents', path: '/management/managers', icon: Users },
     { label: 'Register New Agent', path: '/management/register-agent', icon: PlusCircle },
   ],
 };

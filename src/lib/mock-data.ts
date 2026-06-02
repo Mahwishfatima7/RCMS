@@ -22,7 +22,7 @@ export interface Complaint {
   purchaseDate: string;
   warrantyExpiry: string;
   warrantyValid: boolean;
-  status: 'Pending' | 'Booked' | 'In-Progress' | 'Replaced' | 'Rejected';
+  status: 'Pending' | 'In-Progress' | 'Replaced' | 'Rejected';
   createdAt: string;
   updatedAt: string;
 }
@@ -74,7 +74,7 @@ export const mockComplaints: Complaint[] = [
     customerAddress: 'JBR, Rimal Tower 3, Unit 805', serialNo: 'CAM-2024-002',
     deviceModel: 'Dahua IPC-HDW3841T', issueDescription: 'Water damage to camera housing, condensation inside lens',
     purchaseDate: '2024-06-20', warrantyExpiry: '2026-06-20', warrantyValid: true,
-    status: 'Booked', createdAt: '2026-03-26', updatedAt: '2026-03-27',
+    status: 'In-Progress', createdAt: '2026-03-26', updatedAt: '2026-03-27',
   },
   {
     id: '3', ticketNo: 'RCMS-2026-0003', agentId: '1', agentName: 'Ahmed Khan',
@@ -125,7 +125,6 @@ export const mockManufacturerUpdates: ManufacturerUpdate[] = [
 
 export const statusColors: Record<Complaint['status'], string> = {
   'Pending': 'bg-warning/20 text-warning border-warning/30',
-  'Booked': 'bg-info/20 text-info border-info/30',
   'In-Progress': 'bg-primary/20 text-primary border-primary/30',
   'Replaced': 'bg-success/20 text-success border-success/30',
   'Rejected': 'bg-destructive/20 text-destructive border-destructive/30',

@@ -88,17 +88,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Toggle between Login and Register */}
-        <div className="flex gap-2 mb-6 bg-secondary/50 p-1 rounded-lg">
-          <button
-            type="button"
-            disabled={loginLoading}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all bg-primary text-primary-foreground`}
-          >
-            Sign In
-          </button>
-        </div>
-
         {/* LOGIN FORM */}
         <form onSubmit={handleLogin} className="space-y-4">
           {/* Error Message */}
