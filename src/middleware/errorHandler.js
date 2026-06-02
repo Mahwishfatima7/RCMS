@@ -1,8 +1,6 @@
-// Global error handler middleware
+﻿// Global error handler middleware
 const errorHandler = (err, req, res, next) => {
-  console.error("Error:", err);
-
-  // Joi validation errors
+    // Joi validation errors
   if (err.name === "ValidationError") {
     return res.status(400).json({
       success: false,
@@ -57,3 +55,4 @@ module.exports = {
   errorHandler,
   notFound,
 };
+

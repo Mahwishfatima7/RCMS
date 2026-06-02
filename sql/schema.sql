@@ -56,10 +56,11 @@ CREATE TABLE IF NOT EXISTS complaints (
   customer_phone VARCHAR(20) NOT NULL,
   customer_email VARCHAR(100) NOT NULL,
   customer_address VARCHAR(255) NOT NULL,
+  customer_account_no VARCHAR(50),
   serial_no VARCHAR(50),
   device_model VARCHAR(100) NOT NULL,
   issue_description LONGTEXT NOT NULL,
-  status ENUM('Pending', 'Booked', 'In-Progress', 'Replaced', 'Rejected') DEFAULT 'Pending',
+  status ENUM('Pending', 'In-Progress', 'Replaced', 'Rejected') DEFAULT 'Pending',
   priority ENUM('low', 'medium', 'high', 'critical') DEFAULT 'medium',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -113,11 +114,11 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 -- INDEXES FOR PERFORMANCE
 -- ==========================================
 -- Status searches
-CREATE INDEX idx_complaint_status_date ON complaints(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_complaint_status_date ON complaints(status, created_at DESC);
 -- Agent daily view
-CREATE INDEX idx_agent_created ON complaints(agent_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_created ON complaints(agent_id, created_at DESC);
 -- Recent complaints
-CREATE INDEX idx_recent_complaints ON complaints(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_recent_complaints ON complaints(created_at DESC);
 
 -- ==========================================
 -- VIEWS (Optional - for reporting)

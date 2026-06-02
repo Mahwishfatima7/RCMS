@@ -89,8 +89,8 @@ exports.createBooking = async (req, res, next) => {
       notes,
     });
 
-    // Update complaint status to Booked
-    await Complaint.updateStatus(complaintId, "Booked");
+    // Update complaint status to In-Progress
+    await Complaint.updateStatus(complaintId, "In-Progress");
 
     res.status(201).json({
       success: true,

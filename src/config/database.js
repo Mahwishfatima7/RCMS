@@ -1,4 +1,4 @@
-const mysql = require("mysql2/promise");
+﻿const mysql = require("mysql2/promise");
 const config = require("./config");
 
 // Create connection pool
@@ -18,12 +18,10 @@ const pool = mysql.createPool({
 pool
   .getConnection()
   .then((conn) => {
-    console.log("✓ MySQL Database connected successfully");
-    conn.release();
+        conn.release();
   })
   .catch((err) => {
-    console.error("✗ Database connection failed:", err.message);
-    process.exit(1);
+        process.exit(1);
   });
 
 // Execute query helper
@@ -65,3 +63,4 @@ module.exports = {
   insertOne,
   updateOne,
 };
+

@@ -71,3 +71,66 @@ exports.deleteUser = async (req, res, next) => {
     next(err);
   }
 };
+
+exports.getManagers = async (req, res, next) => {
+  try {
+    const { getAll } = require("../config/database");
+    
+    // Get ALL management users dynamically
+    const managers = await getAll(
+      `SELECT id, name 
+       FROM users 
+       WHERE role = 'management' AND status = 'active'
+       ORDER BY name`,
+      []
+    );
+
+    // For each manager, get their assigned agents
+    const managersWithAgents = await Promise.all(
+      managers.map(async (manager) => {
+        const agents = await getAll(
+          "SELECT id, name, email, phone FROM users WHERE manager_name = ? AND role = 'agent' AND status = 'active' ORDER BY name",
+          [manager.name]
+        );
+
+        return {
+          id: manager.id,
+          name: manager.name,
+          agentCount: agents.length,
+          agents: agents,
+        };
+      })
+    );
+
+    res.json({
+      success: true,
+      data: managersWithAgents,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getManagersList = async (req, res, next) => {
+  try {
+    const { getAll } = require("../config/database");
+    
+    // Get ALL management users dynamically (excluding 'managemnet')
+    const managers = await getAll(
+      `SELECT name FROM users 
+       WHERE role = 'management' AND status = 'active'
+       ORDER BY name`,
+      []
+    );
+
+    // Return just the manager names
+    const managerNames = managers.map(m => m.name);
+
+    res.json({
+      success: true,
+      data: managerNames,
+    });
+  } catch (err) {
+    next(err);
+  }
+};

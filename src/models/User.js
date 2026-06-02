@@ -3,7 +3,7 @@ const { getOne, getAll, insertOne, updateOne } = require("../config/database");
 class User {
   static async findById(id) {
     return getOne(
-      "SELECT id, name, email, role, status, phone, contact_no, emergency_contact, department, created_at FROM users WHERE id = ?",
+      "SELECT id, name, email, role, status, phone, contact_no, emergency_contact, manager_name, department, created_at FROM users WHERE id = ?",
       [id],
     );
   }
@@ -16,14 +16,14 @@ class User {
     const safeLimit = Number(limit) || 50;
     const safeOffset = Number(offset) || 0;
     return getAll(
-      `SELECT id, name, email, role, status, phone, contact_no, emergency_contact, department, created_at FROM users LIMIT ${safeLimit} OFFSET ${safeOffset}`,
+      `SELECT id, name, email, role, status, phone, contact_no, emergency_contact, manager_name, department, created_at FROM users LIMIT ${safeLimit} OFFSET ${safeOffset}`,
       [],
     );
   }
 
   static async create(data) {
     const result = await insertOne(
-      "INSERT INTO users (name, email, password_hash, role, status, phone, contact_no, emergency_contact, department) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO users (name, email, password_hash, role, status, phone, contact_no, emergency_contact, manager_name, department) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         data.name,
         data.email,
@@ -33,6 +33,7 @@ class User {
         data.phone || null,
         data.contact_no || null,
         data.emergency_contact || null,
+        data.manager_name || null,
         data.department || null,
       ],
     );

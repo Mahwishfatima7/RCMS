@@ -8,11 +8,12 @@ exports.getDashboard = async (req, res, next) => {
     );
     const totalComplaints = totalResult.total;
 
-    // Status distribution
+    // Status distribution - ordered by our desired status order
     const statusResult = await getAll(`
       SELECT status, COUNT(*) as count 
       FROM complaints 
       GROUP BY status
+      ORDER BY FIELD(status, 'Pending', 'In-Progress', 'Replaced', 'Rejected')
     `);
 
     // Monthly trends
@@ -56,25 +57,33 @@ exports.getDashboard = async (req, res, next) => {
 
 exports.getReport = async (req, res, next) => {
   try {
-    const { dateFrom, dateTo, status } = req.query;
+    const { dateFrom, dateTo, status, search } = req.query;
 
-    let sql = "SELECT * FROM complaints WHERE 1=1";
+    let sql = `SELECT c.*, u.name AS agent_name, u.email AS agent_email, u.manager_name 
+               FROM complaints c 
+               LEFT JOIN users u ON c.agent_id = u.id 
+               WHERE 1=1`;
     const values = [];
 
     if (dateFrom) {
-      sql += " AND DATE(created_at) >= ?";
+      sql += " AND DATE(c.created_at) >= ?";
       values.push(dateFrom);
     }
     if (dateTo) {
-      sql += " AND DATE(created_at) <= ?";
+      sql += " AND DATE(c.created_at) <= ?";
       values.push(dateTo);
     }
     if (status) {
-      sql += " AND status = ?";
+      sql += " AND c.status = ?";
       values.push(status);
     }
+    if (search) {
+      sql += " AND (c.ticket_no LIKE ? OR u.name LIKE ? OR u.email LIKE ? OR c.customer_name LIKE ? OR c.customer_phone LIKE ? OR c.serial_no LIKE ? OR c.device_model LIKE ?)";
+      const searchTerm = `%${search}%`;
+      values.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+    }
 
-    sql += " ORDER BY created_at DESC";
+    sql += " ORDER BY c.created_at DESC";
 
     const complaints = await getAll(sql, values);
 
@@ -89,25 +98,33 @@ exports.getReport = async (req, res, next) => {
 
 exports.exportCSV = async (req, res, next) => {
   try {
-    const { dateFrom, dateTo, status } = req.query;
+    const { dateFrom, dateTo, status, search } = req.query;
 
-    let sql = "SELECT * FROM complaints WHERE 1=1";
+    let sql = `SELECT c.*, u.name AS agent_name, u.email AS agent_email, u.manager_name 
+               FROM complaints c 
+               LEFT JOIN users u ON c.agent_id = u.id 
+               WHERE 1=1`;
     const values = [];
 
     if (dateFrom) {
-      sql += " AND DATE(created_at) >= ?";
+      sql += " AND DATE(c.created_at) >= ?";
       values.push(dateFrom);
     }
     if (dateTo) {
-      sql += " AND DATE(created_at) <= ?";
+      sql += " AND DATE(c.created_at) <= ?";
       values.push(dateTo);
     }
     if (status) {
-      sql += " AND status = ?";
+      sql += " AND c.status = ?";
       values.push(status);
     }
+    if (search) {
+      sql += " AND (c.ticket_no LIKE ? OR u.name LIKE ? OR u.email LIKE ? OR c.customer_name LIKE ? OR c.customer_phone LIKE ? OR c.serial_no LIKE ? OR c.device_model LIKE ?)";
+      const searchTerm = `%${search}%`;
+      values.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+    }
 
-    sql += " ORDER BY created_at DESC";
+    sql += " ORDER BY c.created_at DESC";
 
     const complaints = await getAll(sql, values);
 
@@ -115,22 +132,22 @@ exports.exportCSV = async (req, res, next) => {
     const headers = [
       "Ticket No",
       "Agent",
+      "Manager",
       "Customer",
       "Serial",
       "Model",
       "Status",
       "Created",
-      "Warranty Valid",
     ];
     const rows = complaints.map((c) => [
       c.ticket_no,
-      c.agent_id,
+      c.agent_name,
+      c.manager_name || "—",
       c.customer_name,
       c.serial_no,
       c.device_model,
       c.status,
       c.created_at,
-      c.warranty_valid ? "Yes" : "No",
     ]);
 
     const csv = [

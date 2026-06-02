@@ -1,10 +1,11 @@
-const express = require("express");
+﻿const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
 require("express-async-errors");
 
 const config = require("./config/config");
 const { errorHandler, notFound } = require("./middleware/errorHandler");
+const slaScheduler = require("./utils/slaScheduler");
 
 // Routes
 const authRoutes = require("./routes/authRoutes");
@@ -56,21 +57,19 @@ app.use(errorHandler);
 // Start server
 const PORT = config.port;
 app.listen(PORT, () => {
-  console.log(`
-╔════════════════════════════════════════════════╗
-║                                                ║
-║   RCMS Backend API Server                      ║
-║   🚀 Server running on http://localhost:${PORT}   ║
-║                                                ║
-║   Environment: ${config.environment}                    ║
-║   Database: ${config.database.database}@${config.database.host}           ║
-║                                                ║
-╚════════════════════════════════════════════════╝
-  `);
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+    // Start SLA scheduler
+  slaScheduler.startScheduler(60000); // Update every 60 seconds (1 minute)
 });
 
 // Graceful shutdown
 process.on("SIGTERM", () => {
-  console.log("SIGTERM signal received: closing HTTP server");
+    slaScheduler.stopScheduler();
   process.exit(0);
 });
+
+process.on("SIGINT", () => {
+    slaScheduler.stopScheduler();
+  process.exit(0);
+});
+

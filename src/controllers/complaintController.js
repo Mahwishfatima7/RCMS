@@ -1,6 +1,6 @@
 const Complaint = require("../models/Complaint");
 const SerialEntry = require("../models/SerialEntry");
-const { getAll } = require("../config/database");
+const { getAll, getOne } = require("../config/database");
 
 // Generate unique ticket number
 const generateTicketNo = async () => {
@@ -21,9 +21,13 @@ exports.getComplaints = async (req, res, next) => {
     const offset = Number(req.query.offset) || 0;
     const filters = {};
 
-    if (req.user.role === "agent") {
-      filters.agentId = req.user.id;
-    } else if (status) {
+    // Allow agents to see all complaints, not just their own
+    // Use /agent/:agentId endpoint for agent-specific complaints
+    if (agentId) {
+      filters.agentId = agentId;
+    }
+
+    if (status) {
       filters.status = status;
     }
 
@@ -85,6 +89,55 @@ exports.getComplaintsByAgent = async (req, res, next) => {
   }
 };
 
+exports.getComplaintsByManager = async (req, res, next) => {
+  try {
+    const limit = Number(req.query.limit) || 50;
+    const offset = Number(req.query.offset) || 0;
+    const managerName = req.params.managerName;
+
+    // Get all agents under this manager
+    const agents = await getAll(
+      "SELECT id FROM users WHERE manager_name = ? AND role = 'agent'",
+      [managerName],
+    );
+
+    if (agents.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          complaints: [],
+          total: 0,
+          limit,
+          offset,
+        },
+      });
+    }
+
+    const agentIds = agents.map(a => a.id);
+
+    const filters = {
+      agentIds,
+      limit,
+      offset,
+    };
+
+    const complaints = await Complaint.getAll(filters);
+    const total = await Complaint.getCount(filters);
+
+    res.json({
+      success: true,
+      data: {
+        complaints,
+        total,
+        limit,
+        offset,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.getComplaintById = async (req, res, next) => {
   try {
     const complaint = await Complaint.findById(req.params.id);
@@ -107,9 +160,11 @@ exports.createComplaint = async (req, res, next) => {
       customerPhone,
       customerEmail,
       customerAddress,
+      customerAccountNo,
       serialNo,
       issueDescription,
       deviceModel,
+      priority,
     } = req.body;
 
     // Check if serial number exists in database
@@ -147,9 +202,11 @@ exports.createComplaint = async (req, res, next) => {
       customerPhone,
       customerEmail,
       customerAddress,
+      customerAccountNo,
       serialNo: serialNo,
       deviceModel: deviceModel || "Not Specified",
       issueDescription,
+      priority: priority || "medium",
       status: "Pending",
     });
 
@@ -221,6 +278,120 @@ exports.deleteComplaint = async (req, res, next) => {
     res.json({
       success: true,
       message: "Complaint deleted",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ============== SLA ENDPOINTS ==============
+
+exports.getSLAInfo = async (req, res, next) => {
+  try {
+    const slaInfo = await Complaint.getSLAInfo(req.params.id);
+    if (!slaInfo) {
+      return res
+        .status(404)
+        .json({ success: false, error: "Complaint not found" });
+    }
+
+    res.json({ success: true, data: { slaInfo } });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getSLAStatistics = async (req, res, next) => {
+  try {
+    const slaService = require("../utils/slaService");
+    const filters = {
+      agentId: req.query.agentId ? Number(req.query.agentId) : undefined,
+      slaStatus: req.query.slaStatus,
+      priority: req.query.priority,
+    };
+
+    const stats = await slaService.getSLAStatistics(filters);
+    const distribution = await slaService.getSLADistributionByPriority();
+
+    res.json({
+      success: true,
+      data: {
+        statistics: stats,
+        distribution,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.getComplaintsBySLAStatus = async (req, res, next) => {
+  try {
+    const { slaStatus } = req.params;
+    const limit = Number(req.query.limit) || 50;
+    const offset = Number(req.query.offset) || 0;
+
+    const filters = {
+      slaStatus,
+      limit,
+      offset,
+    };
+
+    const complaints = await Complaint.getAll(filters);
+    const total = await Complaint.getCount({ slaStatus });
+
+    res.json({
+      success: true,
+      data: {
+        complaints,
+        total,
+        limit,
+        offset,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.refreshSLAStatus = async (req, res, next) => {
+  try {
+    const complaint = await Complaint.findById(req.params.id);
+    if (!complaint) {
+      return res
+        .status(404)
+        .json({ success: false, error: "Complaint not found" });
+    }
+
+    const newStatus = await Complaint.refreshSLAStatus(req.params.id);
+    const updated = await Complaint.findById(req.params.id);
+
+    res.json({
+      success: true,
+      message: "SLA status refreshed",
+      data: { complaint: updated, slaStatus: newStatus },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.refreshAllSLAStatuses = async (req, res, next) => {
+  try {
+    // Admin only
+    if (req.user.role !== "admin") {
+      return res
+        .status(403)
+        .json({ success: false, error: "Admin access required" });
+    }
+
+    const slaService = require("../utils/slaService");
+    const result = await slaService.refreshAllOpenSLAStatuses();
+
+    res.json({
+      success: true,
+      message: "All SLA statuses refreshed",
+      data: result,
     });
   } catch (err) {
     next(err);

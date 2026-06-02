@@ -53,7 +53,6 @@ const complaintSchema = Joi.object({
 const complaintUpdateSchema = Joi.object({
   status: Joi.string().valid(
     "Pending",
-    "Booked",
     "In-Progress",
     "Replaced",
     "Rejected",
@@ -111,6 +110,9 @@ const agentCreationSchema = Joi.object({
   }),
   emergency_contact: Joi.string().required().messages({
     "any.required": "Emergency contact is required",
+  }),
+  manager_name: Joi.string().required().messages({
+    "any.required": "Manager name is required",
   }),
   password: Joi.string()
     .min(8)

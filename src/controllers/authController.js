@@ -5,6 +5,7 @@ const {
   generateRefreshToken,
   verifyRefreshToken,
 } = require("../utils/jwt");
+const { sendAgentCredentialsEmail } = require("../utils/emailService");
 
 // Helper function to generate random password
 const generateRandomPassword = () => {
@@ -91,6 +92,7 @@ exports.createAgent = async (req, res, next) => {
       email,
       contact_no,
       emergency_contact,
+      manager_name,
       password,
     } = req.body;
 
@@ -122,13 +124,20 @@ exports.createAgent = async (req, res, next) => {
       role: "agent",
       contact_no: contact_no || null,
       emergency_contact: emergency_contact || null,
+      manager_name: manager_name || null,
     });
+
+    // Send credentials email to agent
+    const emailResult = await sendAgentCredentialsEmail(email, name, password);
 
     const { password_hash, ...agentWithoutPassword } = agent;
 
     res.status(201).json({
       success: true,
-      message: "Agent created successfully",
+      message: emailResult.success 
+        ? "Agent created successfully and credentials email sent" 
+        : "Agent created but email delivery failed. Check backend logs.",
+      emailSent: emailResult.success,
       data: {
         agent: agentWithoutPassword,
       },

@@ -1,4 +1,4 @@
-const path = require("path");
+﻿const path = require("path");
 require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
 
 module.exports = {
@@ -42,9 +42,6 @@ module.exports = {
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        console.error(
-          `CORS Error: Origin '${origin}' not in allowed list: ${allowedOrigins.join(", ")}`,
-        );
         callback(new Error("Not allowed by CORS"));
       }
     },
@@ -65,3 +62,5 @@ module.exports = {
     prefix: "/api",
   },
 };
+
+

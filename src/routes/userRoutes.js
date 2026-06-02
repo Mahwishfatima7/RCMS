@@ -4,7 +4,11 @@ const userController = require("../controllers/userController");
 const { auth, authorize } = require("../middleware/auth");
 const { validate, registerSchema } = require("../utils/validators");
 
-router.use(auth, authorize("admin"));
+router.use(auth, authorize("admin", "management", "manager"));
+
+router.get("/managers/list", userController.getManagersList);
+
+router.get("/managers", userController.getManagers);
 
 router.get("/", userController.getUsers);
 

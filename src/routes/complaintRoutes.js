@@ -11,8 +11,22 @@ const {
 // All routes require authentication
 router.use(auth);
 
-// Get complaints (agent can only see their own)
+// SLA endpoints (most specific first)
+router.get("/sla/statistics", complaintController.getSLAStatistics);
+router.post("/sla/refresh-all", complaintController.refreshAllSLAStatuses);
+router.get("/sla/:slaStatus", complaintController.getComplaintsBySLAStatus);
+router.get("/:id/sla", complaintController.getSLAInfo);
+router.post("/:id/sla/refresh", complaintController.refreshSLAStatus);
+
+// Get complaints (agent can see all)
 router.get("/", complaintController.getComplaints);
+
+// Get manager's complaints (management only)
+router.get(
+  "/manager/:managerName",
+  authorize("management", "admin"),
+  complaintController.getComplaintsByManager,
+);
 
 // Get agent's complaints (agent only)
 router.get(
