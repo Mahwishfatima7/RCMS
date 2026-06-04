@@ -13,17 +13,24 @@ exports.getDashboard = async (req, res, next) => {
       SELECT status, COUNT(*) as count 
       FROM complaints 
       GROUP BY status
-      ORDER BY FIELD(status, 'Pending', 'In-Progress', 'Replaced', 'Rejected')
+      ORDER BY CASE status
+        WHEN 'Pending' THEN 1
+        WHEN 'Booked' THEN 2
+        WHEN 'In-Progress' THEN 3
+        WHEN 'Replaced' THEN 4
+        WHEN 'Rejected' THEN 5
+        ELSE 6
+      END
     `);
 
     // Monthly trends
     const monthlyResult = await getAll(`
       SELECT 
-        DATE_FORMAT(created_at, '%Y-%m') as month,
+        TO_CHAR(created_at, 'YYYY-MM') as month,
         COUNT(*) as submitted,
         SUM(CASE WHEN status IN ('Replaced', 'Rejected') THEN 1 ELSE 0 END) as resolved
       FROM complaints 
-      GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+      GROUP BY TO_CHAR(created_at, 'YYYY-MM')
       ORDER BY month DESC 
       LIMIT 12
     `);

@@ -1,59 +1,72 @@
-﻿const mysql = require("mysql2/promise");
+const { Pool, types } = require("pg");
 const config = require("./config");
 
-// Create connection pool
-const pool = mysql.createPool({
-  host: config.database.host,
-  port: config.database.port,
-  user: config.database.user,
-  password: config.database.password,
-  database: config.database.database,
-  waitForConnections: config.database.waitForConnections,
-  connectionLimit: config.database.connectionLimit,
-  queueLimit: config.database.queueLimit,
-  multipleStatements: true,
+const connectionString = config.databaseUrl || "";
+
+types.setTypeParser(20, (value) => Number.parseInt(value, 10));
+types.setTypeParser(1700, (value) => Number.parseFloat(value));
+
+if (!connectionString) {
+  throw new Error(
+    "DATABASE_URL is required. Set it to your Neon PostgreSQL connection string.",
+  );
+}
+
+const pool = new Pool({
+  connectionString,
+  ssl: config.dbSsl ? { rejectUnauthorized: false } : false,
 });
 
-// Test connection
+const formatQuery = (sql, values = []) => {
+  let index = 0;
+  const text = sql.replace(/\?/g, () => `$${++index}`);
+  return { text, values };
+};
+
+const query = async (sql, values = []) => {
+  const { text, values: params } = formatQuery(sql, values);
+  return pool.query(text, params);
+};
+
+const getOne = async (sql, values = []) => {
+  const result = await query(sql, values);
+  return result.rows[0];
+};
+
+const getAll = async (sql, values = []) => {
+  const result = await query(sql, values);
+  return result.rows;
+};
+
+const insertOne = async (sql, values = []) => {
+  const { text, values: params } = formatQuery(sql, values);
+  const hasReturning = /\breturning\b/i.test(text);
+  const insertText = hasReturning ? text : `${text.replace(/;$/, "")} RETURNING id`;
+  const result = await pool.query(insertText, params);
+  return {
+    insertId: result.rows[0]?.id ?? null,
+    affectedRows: result.rowCount,
+  };
+};
+
+const updateOne = async (sql, values = []) => {
+  const result = await query(sql, values);
+  return {
+    affectedRows: result.rowCount,
+    changedRows: result.rowCount,
+  };
+};
+
+const close = async () => {
+  await pool.end();
+};
+
 pool
-  .getConnection()
-  .then((conn) => {
-        conn.release();
-  })
+  .query("SELECT 1")
   .catch((err) => {
-        process.exit(1);
+    console.error("Database connection failed:", err.message);
+    process.exit(1);
   });
-
-// Execute query helper
-const query = (sql, values) => {
-  return pool.execute(sql, values);
-};
-
-// Get single row
-const getOne = (sql, values) => {
-  return pool.execute(sql, values).then(([rows]) => rows[0]);
-};
-
-// Get all rows
-const getAll = (sql, values) => {
-  return pool.execute(sql, values).then(([rows]) => rows);
-};
-
-// Insert and return insert id
-const insertOne = (sql, values) => {
-  return pool.execute(sql, values).then(([result]) => ({
-    insertId: result.insertId,
-    affectedRows: result.affectedRows,
-  }));
-};
-
-// Update/Delete
-const updateOne = (sql, values) => {
-  return pool.execute(sql, values).then(([result]) => ({
-    affectedRows: result.affectedRows,
-    changedRows: result.changedRows,
-  }));
-};
 
 module.exports = {
   pool,
@@ -62,5 +75,5 @@ module.exports = {
   getAll,
   insertOne,
   updateOne,
+  close,
 };
-

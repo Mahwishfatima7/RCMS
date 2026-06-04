@@ -7,6 +7,8 @@ const config = require("./config/config");
 const { errorHandler, notFound } = require("./middleware/errorHandler");
 const slaScheduler = require("./utils/slaScheduler");
 
+const enableSlaScheduler = process.env.ENABLE_SLA_SCHEDULER !== "false";
+
 // Routes
 const authRoutes = require("./routes/authRoutes");
 const complaintRoutes = require("./routes/complaintRoutes");
@@ -58,18 +60,24 @@ app.use(errorHandler);
 const PORT = config.port;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
-    // Start SLA scheduler
-  slaScheduler.startScheduler(60000); // Update every 60 seconds (1 minute)
+  if (enableSlaScheduler) {
+    // Start SLA scheduler once per instance.
+    slaScheduler.startScheduler(60000);
+  }
 });
 
 // Graceful shutdown
 process.on("SIGTERM", () => {
+  if (enableSlaScheduler) {
     slaScheduler.stopScheduler();
+  }
   process.exit(0);
 });
 
 process.on("SIGINT", () => {
+  if (enableSlaScheduler) {
     slaScheduler.stopScheduler();
+  }
   process.exit(0);
 });
 

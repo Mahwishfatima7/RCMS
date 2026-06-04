@@ -53,6 +53,7 @@ const complaintSchema = Joi.object({
 const complaintUpdateSchema = Joi.object({
   status: Joi.string().valid(
     "Pending",
+    "Booked",
     "In-Progress",
     "Replaced",
     "Rejected",
