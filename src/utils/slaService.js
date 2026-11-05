@@ -17,8 +17,6 @@ const SLA_AT_RISK_THRESHOLD = 0.8; // 80% of time passed
 
 /**
  * Get SLA duration for a priority level
- * @param {string} priority - Priority level (low, medium, high, critical)
- * @returns {number} Duration in hours
  */
 exports.getSLADuration = async (priority = "medium") => {
   try {
@@ -26,38 +24,38 @@ exports.getSLADuration = async (priority = "medium") => {
       "SELECT duration_hours FROM sla_config WHERE priority = ?",
       [priority],
     );
+
     return config?.duration_hours || DEFAULT_SLA_DURATIONS[priority] || 48;
   } catch (error) {
-        return DEFAULT_SLA_DURATIONS[priority] || 48;
+    return DEFAULT_SLA_DURATIONS[priority] || 48;
   }
 };
 
 /**
  * Calculate SLA deadline based on creation time and priority
- * @param {Date} createdAt - When the complaint was created
- * @param {string} priority - Priority level
- * @returns {Date} SLA deadline
  */
 exports.calculateSLADeadline = async (createdAt, priority = "medium") => {
   const duration = await exports.getSLADuration(priority);
   const deadline = new Date(createdAt);
+
   deadline.setTime(deadline.getTime() + duration * 60 * 60 * 1000);
+
   return deadline;
 };
 
 /**
  * Determine SLA status based on current time and deadline
- * @param {Date} deadline - SLA deadline
- * @param {Date} resolvedAt - When ticket was resolved (optional)
- * @param {string} priority - Priority level for duration calculation
- * @returns {Promise<string>} SLA status (Within SLA, At Risk, Breached)
  */
-exports.determineSLAStatus = async (deadline, resolvedAt = null, priority = "medium") => {
+exports.determineSLAStatus = async (
+  deadline,
+  resolvedAt = null,
+  priority = "medium",
+) => {
   const now = new Date();
 
-  // If ticket is resolved before deadline, it's within SLA
   if (resolvedAt) {
     const resolvedTime = new Date(resolvedAt);
+
     if (resolvedTime <= deadline) {
       return "Within SLA";
     } else {
@@ -65,16 +63,14 @@ exports.determineSLAStatus = async (deadline, resolvedAt = null, priority = "med
     }
   }
 
-  // For open tickets, check against current time
   if (now > deadline) {
     return "Breached";
   }
 
-  // Get the actual duration from database based on priority
   const duration = await exports.getSLADuration(priority);
-  const totalDurationMs = duration * 60 * 60 * 1000; // Convert hours to milliseconds
+  const totalDurationMs = duration * 60 * 60 * 1000;
   const createdAt = new Date(deadline.getTime() - totalDurationMs);
-  
+
   const timeRemaining = deadline - now;
   const elapsedTime = now - createdAt;
   const percentageUsed = (elapsedTime / totalDurationMs) * 100;
@@ -88,21 +84,21 @@ exports.determineSLAStatus = async (deadline, resolvedAt = null, priority = "med
 
 /**
  * Calculate time remaining in hours
- * @param {Date} deadline - SLA deadline
- * @returns {number} Hours remaining (can be negative if breached)
  */
 exports.calculateTimeRemaining = (deadline, atTime = new Date()) => {
   const diff = deadline - new Date(atTime);
-  return Math.round(diff / (1000 * 60 * 60) * 100) / 100; // Round to 2 decimals
+
+  return Math.round((diff / (1000 * 60 * 60)) * 100) / 100;
 };
 
 /**
  * Calculate percentage of SLA time used
- * @param {Date} createdAt - When complaint was created
- * @param {Date} deadline - SLA deadline
- * @returns {number} Percentage (0-100)
  */
-exports.calculateSLAPercentageUsed = (createdAt, deadline, atTime = new Date()) => {
+exports.calculateSLAPercentageUsed = (
+  createdAt,
+  deadline,
+  atTime = new Date(),
+) => {
   const totalDuration = deadline - new Date(createdAt);
   const elapsedTime = new Date(atTime) - new Date(createdAt);
 
@@ -113,9 +109,7 @@ exports.calculateSLAPercentageUsed = (createdAt, deadline, atTime = new Date()) 
 };
 
 /**
- * Get SLA summary for a single complaint with all details
- * @param {Object} complaint - Complaint object
- * @returns {Promise<Object>} SLA summary with all metrics
+ * Get SLA summary for a single complaint
  */
 exports.getSLASummary = async (complaint) => {
   if (!complaint.sla_deadline) {
@@ -123,9 +117,15 @@ exports.getSLASummary = async (complaint) => {
   }
 
   const deadline = new Date(complaint.sla_deadline);
+
+  // Replaced complaints use their permanent SLA stop timestamp.
   const stoppedAt =
-    complaint.status === "Replaced" ? complaint.updated_at : null;
+    complaint.status === "Replaced"
+      ? complaint.sla_stopped_at
+      : null;
+
   const calculationTime = stoppedAt || new Date();
+
   const status = await exports.determineSLAStatus(
     deadline,
     stoppedAt,
@@ -139,7 +139,10 @@ exports.getSLASummary = async (complaint) => {
     slaDeadline: complaint.sla_deadline,
     slaBreachedAt: complaint.sla_breached_at,
     slaStoppedAt: stoppedAt,
-    timeRemaining: exports.calculateTimeRemaining(deadline, calculationTime),
+    timeRemaining: exports.calculateTimeRemaining(
+      deadline,
+      calculationTime,
+    ),
     percentageUsed: exports.calculateSLAPercentageUsed(
       complaint.created_at,
       deadline,
@@ -152,43 +155,41 @@ exports.getSLASummary = async (complaint) => {
 
 /**
  * Refresh SLA status in database for a single complaint
- * @param {Object} complaint - Complaint object
- * @returns {Promise<string>} Updated SLA status
  */
 exports.refreshSLAStatus = async (complaint) => {
   if (!complaint || !complaint.sla_deadline) {
-    return null;
+    return complaint?.sla_status ?? null;
   }
 
   const deadline = new Date(complaint.sla_deadline);
-  const status = await exports.determineSLAStatus(
+
+  const isReplaced = complaint.status === "Replaced";
+
+  const stoppedAt = isReplaced
+    ? complaint.sla_stopped_at
+    : null;
+
+  const newStatus = await exports.determineSLAStatus(
     deadline,
-    complaint.status === "Replaced" ? complaint.updated_at : null,
+    stoppedAt,
     complaint.priority,
   );
 
-  // Update database with new status
-  const { updateOne } = require("../config/database");
-  const breachedAt = status === "Breached" ? new Date() : null;
-  await updateOne(
-    "UPDATE complaints SET sla_status = ?, sla_breached_at = ? WHERE id = ?",
-    [status, breachedAt, complaint.id],
-  );
+  if (newStatus !== complaint.sla_status) {
+    await exports.updateComplaintSLAStatus(
+      complaint.id,
+      newStatus,
+    );
+  }
 
-  return status;
+  return newStatus;
 };
 
 /**
  * Update all SLA statuses in batch (for background job)
- * Updates tickets to Within SLA, At Risk, or Breached status
- * Includes both open and resolved tickets
- * @returns {Promise<number>} Number of tickets updated
  */
 exports.updateAllSLAStatuses = async () => {
   try {
-    const { getAll, updateOne } = require("../config/database");
-    
-    // Get all tickets (both open and resolved)
     const allTickets = await getAll(
       "SELECT * FROM complaints",
     );
@@ -196,44 +197,55 @@ exports.updateAllSLAStatuses = async () => {
     let updatedCount = 0;
 
     for (const ticket of allTickets) {
-      // For resolved tickets, pass the updated_at time to check if resolved before deadline
-      const isResolved = ticket.status === "Replaced" || ticket.status === "Rejected";
+      if (!ticket.sla_deadline) {
+        continue;
+      }
+
+      const isReplaced = ticket.status === "Replaced";
+      const isRejected = ticket.status === "Rejected";
+
+      // Replaced uses sla_stopped_at.
+      // Rejected keeps the existing updated_at behavior.
+      const resolvedAt = isReplaced
+        ? ticket.sla_stopped_at
+        : isRejected
+          ? ticket.updated_at
+          : null;
+
       const newStatus = await exports.determineSLAStatus(
         new Date(ticket.sla_deadline),
-        isResolved ? ticket.updated_at : null,
+        resolvedAt,
         ticket.priority,
       );
 
-      // If status changed, update it in database
       if (newStatus !== ticket.sla_status) {
-        const breachedAt = newStatus === "Breached" ? new Date() : null;
-        await updateOne(
-          "UPDATE complaints SET sla_status = ?, sla_breached_at = ? WHERE id = ?",
-          [newStatus, breachedAt, ticket.id],
+        await exports.updateComplaintSLAStatus(
+          ticket.id,
+          newStatus,
         );
+
         updatedCount++;
       }
     }
 
     return updatedCount;
   } catch (error) {
-        return 0;
+    return 0;
   }
 };
 
 /**
  * Backward compatibility - alias for updateAllSLAStatuses
- * @deprecated Use updateAllSLAStatuses instead
  */
 exports.updateAllBreachedTickets = exports.updateAllSLAStatuses;
 
 /**
  * Update complaint SLA status in database
- * @param {number} complaintId - Complaint ID
- * @param {string} newStatus - New SLA status
- * @returns {Promise<void>}
  */
-exports.updateComplaintSLAStatus = async (complaintId, newStatus) => {
+exports.updateComplaintSLAStatus = async (
+  complaintId,
+  newStatus,
+) => {
   const now = new Date();
   const breachedAt = newStatus === "Breached" ? now : null;
 
@@ -244,9 +256,11 @@ exports.updateComplaintSLAStatus = async (complaintId, newStatus) => {
 
   // Log to SLA audit trail
   try {
-    const complaint = await getOne("SELECT sla_status FROM complaints WHERE id = ?", [
-      complaintId,
-    ]);
+    const complaint = await getOne(
+      "SELECT sla_status FROM complaints WHERE id = ?",
+      [complaintId],
+    );
+
     if (complaint && complaint.sla_status !== newStatus) {
       await updateOne(
         "INSERT INTO sla_audit (complaint_id, old_status, new_status, reason) VALUES (?, ?, ?, ?)",
@@ -259,39 +273,12 @@ exports.updateComplaintSLAStatus = async (complaintId, newStatus) => {
       );
     }
   } catch (error) {
-      }
-};
-
-/**
- * Refresh SLA status for a complaint and update if changed
- * @param {Object} complaint - Complaint object
- * @returns {Promise<string>} Updated SLA status
- */
-exports.refreshSLAStatus = async (complaint) => {
-  if (!complaint.sla_deadline) {
-    return complaint.sla_status;
+    // Keep existing behavior if audit logging fails.
   }
-
-  const deadline = new Date(complaint.sla_deadline);
-  const stoppedAt =
-    complaint.status === "Replaced" ? complaint.updated_at : null;
-  const newStatus = await exports.determineSLAStatus(
-    deadline,
-    stoppedAt,
-    complaint.priority,
-  );
-
-  if (newStatus !== complaint.sla_status) {
-    await exports.updateComplaintSLAStatus(complaint.id, newStatus);
-  }
-
-  return newStatus;
 };
 
 /**
  * Get SLA statistics for reporting
- * @param {Object} filters - Filter options (agentId, status, etc.)
- * @returns {Promise<Object>} SLA statistics
  */
 exports.getSLAStatistics = async (filters = {}) => {
   let sql = `
@@ -327,6 +314,7 @@ exports.getSLAStatistics = async (filters = {}) => {
 
   try {
     const result = await getOne(sql, values);
+
     return {
       total: result.total || 0,
       withinSLA: result.within_sla || 0,
@@ -338,7 +326,7 @@ exports.getSLAStatistics = async (filters = {}) => {
       latestDeadline: result.latest_deadline,
     };
   } catch (error) {
-        return {
+    return {
       total: 0,
       withinSLA: 0,
       atRisk: 0,
@@ -351,7 +339,6 @@ exports.getSLAStatistics = async (filters = {}) => {
 
 /**
  * Get SLA distribution by priority
- * @returns {Promise<Array>} Distribution of SLA status by priority
  */
 exports.getSLADistributionByPriority = async () => {
   const sql = `
@@ -368,66 +355,89 @@ exports.getSLADistributionByPriority = async () => {
 
   try {
     const rawData = await getAll(sql, []);
-    
-    // Ensure all priority-status combinations exist with at least 0
-    const priorities = ['critical', 'high', 'medium', 'low'];
-    const statuses = ['Within SLA', 'At Risk', 'Breached'];
+
+    const priorities = ["critical", "high", "medium", "low"];
+    const statuses = ["Within SLA", "At Risk", "Breached"];
     const distribution = [];
-    
-    // Create a map for quick lookup
+
     const dataMap = {};
-    rawData.forEach(row => {
+
+    rawData.forEach((row) => {
       const key = `${row.priority}-${row.sla_status}`;
       dataMap[key] = row.count;
     });
-    
-    // Build complete distribution with all combinations
-    priorities.forEach(priority => {
-      statuses.forEach(status => {
+
+    priorities.forEach((priority) => {
+      statuses.forEach((status) => {
         const key = `${priority}-${status}`;
+
         distribution.push({
           priority,
           sla_status: status,
-          count: dataMap[key] || 0
+          count: dataMap[key] || 0,
         });
       });
     });
-    
+
     return distribution;
   } catch (error) {
-        return [];
+    return [];
   }
 };
 
 /**
  * Batch update SLA status for all tickets (open and resolved)
  * Used for periodic refresh
- * @returns {Promise<Object>} Summary of updated tickets
  */
 exports.refreshAllOpenSLAStatuses = async () => {
   const sql = `
-    SELECT id, sla_deadline, sla_status, created_at, updated_at, status, priority
+    SELECT
+      id,
+      sla_deadline,
+      sla_status,
+      created_at,
+      updated_at,
+      sla_stopped_at,
+      status,
+      priority
     FROM complaints
   `;
 
   try {
     const complaints = await getAll(sql, []);
+
     let updated = 0;
     let breached = 0;
     let atRisk = 0;
 
     for (const complaint of complaints) {
-      // For resolved tickets (Replaced, Rejected), check if they were resolved before deadline
-      const isResolved =
-        complaint.status === "Replaced" || complaint.status === "Rejected";
+      if (!complaint.sla_deadline) {
+        continue;
+      }
+
+      const isReplaced = complaint.status === "Replaced";
+      const isRejected = complaint.status === "Rejected";
+
+      // Replaced uses sla_stopped_at.
+      // Rejected retains its previous updated_at behavior.
+      const resolvedAt = isReplaced
+        ? complaint.sla_stopped_at
+        : isRejected
+          ? complaint.updated_at
+          : null;
+
       const newStatus = await exports.determineSLAStatus(
         new Date(complaint.sla_deadline),
-        isResolved ? complaint.updated_at : null,
+        resolvedAt,
         complaint.priority || "medium",
       );
 
       if (newStatus !== complaint.sla_status) {
-        await exports.updateComplaintSLAStatus(complaint.id, newStatus);
+        await exports.updateComplaintSLAStatus(
+          complaint.id,
+          newStatus,
+        );
+
         updated++;
 
         if (newStatus === "Breached") breached++;
@@ -435,8 +445,18 @@ exports.refreshAllOpenSLAStatuses = async () => {
       }
     }
 
-    return { total: complaints.length, updated, breached, atRisk };
+    return {
+      total: complaints.length,
+      updated,
+      breached,
+      atRisk,
+    };
   } catch (error) {
-        return { total: 0, updated: 0, breached: 0, atRisk: 0 };
+    return {
+      total: 0,
+      updated: 0,
+      breached: 0,
+      atRisk: 0,
+    };
   }
 };

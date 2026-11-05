@@ -52,10 +52,15 @@ const schemaStatements = [
     sla_deadline TIMESTAMP,
     sla_status VARCHAR(20) NOT NULL DEFAULT 'Within SLA' CHECK (sla_status IN ('Within SLA', 'At Risk', 'Breached')),
     sla_breached_at TIMESTAMP,
+    sla_stopped_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
   );
   `,
+
+  // Add the column to existing complaints tables if it does not already exist.
+  `ALTER TABLE complaints ADD COLUMN IF NOT EXISTS sla_stopped_at TIMESTAMP;`,
+
   `CREATE INDEX IF NOT EXISTS idx_ticket_no ON complaints(ticket_no);`,
   `CREATE INDEX IF NOT EXISTS idx_agent_id ON complaints(agent_id);`,
   `CREATE INDEX IF NOT EXISTS idx_status ON complaints(status);`,

@@ -1,3 +1,4 @@
+
 const { getOne, getAll, insertOne, updateOne } = require("../config/database");
 const slaService = require("../utils/slaService");
 
@@ -5,8 +6,8 @@ class Complaint {
   static async findById(id) {
     return getOne(
       `SELECT c.*, u.name AS agent_name, u.email AS agent_email, cs.item_no, cs.item_description
-       FROM complaints c 
-       LEFT JOIN users u ON c.agent_id = u.id 
+       FROM complaints c
+       LEFT JOIN users u ON c.agent_id = u.id
        LEFT JOIN camera_serials cs ON c.serial_no = cs.serial_number
        WHERE c.id = ?`,
       [id],
@@ -19,8 +20,8 @@ class Complaint {
 
   static async getAll(filters = {}) {
     let sql = `SELECT c.*, u.name AS agent_name, u.email AS agent_email, cs.item_no, cs.item_description
-               FROM complaints c 
-               LEFT JOIN users u ON c.agent_id = u.id 
+               FROM complaints c
+               LEFT JOIN users u ON c.agent_id = u.id
                LEFT JOIN camera_serials cs ON c.serial_no = cs.serial_number
                WHERE 1=1`;
     const values = [];
@@ -47,8 +48,7 @@ class Complaint {
       values.push(filters.priority);
     }
     if (filters.search) {
-      sql +=
-        " AND (c.ticket_no LIKE ? OR c.customer_name LIKE ? OR c.serial_no LIKE ?)";
+      sql += " AND (c.ticket_no LIKE ? OR c.customer_name LIKE ? OR c.serial_no LIKE ?)";
       const searchTerm = `%${filters.search}%`;
       values.push(searchTerm, searchTerm, searchTerm);
     }
@@ -57,12 +57,10 @@ class Complaint {
     const offset = Number(filters.offset) || 0;
     sql += ` ORDER BY c.created_at DESC LIMIT ${limit} OFFSET ${offset}`;
 
-    const complaints = await getAll(sql, values);
-    return complaints;
+    return getAll(sql, values);
   }
 
   static async create(data) {
-    // Calculate SLA deadline
     const priority = data.priority || "medium";
     const slaDuration = await slaService.getSLADuration(priority);
     const now = new Date();
@@ -92,14 +90,15 @@ class Complaint {
         "Within SLA",
       ],
     );
+
     return this.findById(result.insertId);
   }
 
   static async findActiveComplaintBySerial(serialNo) {
     return getOne(
       `SELECT c.*, u.name AS agent_name, u.email AS agent_email, cs.item_no, cs.item_description
-       FROM complaints c 
-       LEFT JOIN users u ON c.agent_id = u.id 
+       FROM complaints c
+       LEFT JOIN users u ON c.agent_id = u.id
        LEFT JOIN camera_serials cs ON c.serial_no = cs.serial_number
        WHERE c.serial_no = ? AND c.status NOT IN ('Rejected', 'Replaced')
        ORDER BY c.created_at DESC LIMIT 1`,
@@ -111,47 +110,51 @@ class Complaint {
     await updateOne(
       `UPDATE complaints
        SET status = ?,
-           updated_at = CASE
-             WHEN status = 'Replaced' AND ? = 'Replaced' THEN updated_at
-             ELSE NOW()
+           sla_stopped_at = CASE
+             WHEN ? = 'Replaced' AND sla_stopped_at IS NULL THEN NOW()
+             ELSE sla_stopped_at
            END
        WHERE id = ?`,
       [status, status, id],
     );
+
     const updated = await this.findById(id);
+
     if (status === "Replaced") {
       await slaService.refreshSLAStatus(updated);
       return this.findById(id);
     }
+
     return updated;
   }
 
   static async update(id, data) {
     const fields = Object.keys(data)
-      .map((k) => `${k} = ?`)
+      .map((key) => `${key} = ?`)
       .join(", ");
+
     const incomingStatus = data.status ?? null;
-    const values = [
-      incomingStatus,
-      ...Object.values(data),
-      id,
-    ];
+    const values = [incomingStatus, ...Object.values(data), id];
+
     await updateOne(
       `UPDATE complaints
-       SET updated_at = CASE
-             WHEN status = 'Replaced'
-               AND COALESCE(?, 'Replaced') = 'Replaced' THEN updated_at
-             ELSE NOW()
+       SET sla_stopped_at = CASE
+             WHEN COALESCE(?, status) = 'Replaced'
+               AND sla_stopped_at IS NULL THEN NOW()
+             ELSE sla_stopped_at
            END,
            ${fields}
        WHERE id = ?`,
       values,
     );
+
     const updated = await this.findById(id);
-    if (data.status === "Replaced") {
+
+    if (updated.status === "Replaced") {
       await slaService.refreshSLAStatus(updated);
       return this.findById(id);
     }
+
     return updated;
   }
 
@@ -162,7 +165,7 @@ class Complaint {
   static async getSLAInfo(id) {
     const complaint = await this.findById(id);
     if (!complaint) return null;
-    return await slaService.getSLASummary(complaint);
+    return slaService.getSLASummary(complaint);
   }
 
   static async refreshSLAStatus(id) {
@@ -197,8 +200,7 @@ class Complaint {
       values.push(filters.priority);
     }
     if (filters.search) {
-      sql +=
-        " AND (ticket_no LIKE ? OR customer_name LIKE ? OR serial_no LIKE ?)";
+      sql += " AND (ticket_no LIKE ? OR customer_name LIKE ? OR serial_no LIKE ?)";
       const searchTerm = `%${filters.search}%`;
       values.push(searchTerm, searchTerm, searchTerm);
     }
@@ -209,13 +211,13 @@ class Complaint {
 
   static async getBySLAStatus(slaStatus, limit = 50, offset = 0) {
     const sql = `SELECT c.*, u.name AS agent_name, u.email AS agent_email, cs.item_no, cs.item_description
-                 FROM complaints c 
-                 LEFT JOIN users u ON c.agent_id = u.id 
+                 FROM complaints c
+                 LEFT JOIN users u ON c.agent_id = u.id
                  LEFT JOIN camera_serials cs ON c.serial_no = cs.serial_number
                  WHERE c.sla_status = ?
                  ORDER BY c.sla_deadline ASC
                  LIMIT ? OFFSET ?`;
-    
+
     return getAll(sql, [slaStatus, limit, offset]);
   }
 }
