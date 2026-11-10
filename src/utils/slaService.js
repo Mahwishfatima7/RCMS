@@ -5,8 +5,8 @@
 
 const { getOne, getAll, updateOne } = require("../config/database");
 
-// Default SLA durations in hours (if sla_config table is not available)
-const DEFAULT_SLA_DURATIONS = {
+// Priority-based SLA durations in hours.
+const SLA_DURATIONS = {
   low: 72,
   medium: 48,
   high: 24,
@@ -15,32 +15,25 @@ const DEFAULT_SLA_DURATIONS = {
 
 const SLA_AT_RISK_THRESHOLD = 0.8; // 80% of time passed
 
+const normalizePriority = (priority = "medium") =>
+  String(priority).trim().toLowerCase();
+
 /**
  * Get SLA duration for a priority level
  */
-exports.getSLADuration = async (priority = "medium") => {
-  try {
-    const config = await getOne(
-      "SELECT duration_hours FROM sla_config WHERE priority = ?",
-      [priority],
-    );
+exports.getSLADuration = async (priority = "medium") =>
+  SLA_DURATIONS[normalizePriority(priority)] || SLA_DURATIONS.medium;
 
-    return config?.duration_hours || DEFAULT_SLA_DURATIONS[priority] || 48;
-  } catch (error) {
-    return DEFAULT_SLA_DURATIONS[priority] || 48;
-  }
+exports.getSLADeadline = (createdAt, priority = "medium") => {
+  const duration = SLA_DURATIONS[normalizePriority(priority)] || SLA_DURATIONS.medium;
+  return new Date(new Date(createdAt).getTime() + duration * 60 * 60 * 1000);
 };
 
 /**
  * Calculate SLA deadline based on creation time and priority
  */
 exports.calculateSLADeadline = async (createdAt, priority = "medium") => {
-  const duration = await exports.getSLADuration(priority);
-  const deadline = new Date(createdAt);
-
-  deadline.setTime(deadline.getTime() + duration * 60 * 60 * 1000);
-
-  return deadline;
+  return exports.getSLADeadline(createdAt, priority);
 };
 
 /**
@@ -116,12 +109,13 @@ exports.getSLASummary = async (complaint) => {
     return null;
   }
 
-  const deadline = new Date(complaint.sla_deadline);
+  const slaDuration = await exports.getSLADuration(complaint.priority);
+  const deadline = exports.getSLADeadline(complaint.created_at, complaint.priority);
 
   // Replaced complaints use their permanent SLA stop timestamp.
   const stoppedAt =
     complaint.status === "Replaced"
-      ? complaint.sla_stopped_at
+      ? complaint.sla_stopped_at || complaint.updated_at
       : null;
 
   const calculationTime = stoppedAt || new Date();
@@ -136,7 +130,7 @@ exports.getSLASummary = async (complaint) => {
     id: complaint.id,
     ticketNo: complaint.ticket_no,
     slaStatus: status,
-    slaDeadline: complaint.sla_deadline,
+    slaDeadline: deadline.toISOString(),
     slaBreachedAt: complaint.sla_breached_at,
     slaStoppedAt: stoppedAt,
     timeRemaining: exports.calculateTimeRemaining(
@@ -149,7 +143,7 @@ exports.getSLASummary = async (complaint) => {
       calculationTime,
     ),
     priority: complaint.priority,
-    slaDuration: complaint.sla_duration,
+    slaDuration,
   };
 };
 
@@ -161,12 +155,12 @@ exports.refreshSLAStatus = async (complaint) => {
     return complaint?.sla_status ?? null;
   }
 
-  const deadline = new Date(complaint.sla_deadline);
+  const deadline = exports.getSLADeadline(complaint.created_at, complaint.priority);
 
   const isReplaced = complaint.status === "Replaced";
 
   const stoppedAt = isReplaced
-    ? complaint.sla_stopped_at
+    ? complaint.sla_stopped_at || complaint.updated_at
     : null;
 
   const newStatus = await exports.determineSLAStatus(
@@ -201,19 +195,20 @@ exports.updateAllSLAStatuses = async () => {
         continue;
       }
 
+      const deadline = exports.getSLADeadline(ticket.created_at, ticket.priority);
       const isReplaced = ticket.status === "Replaced";
       const isRejected = ticket.status === "Rejected";
 
-      // Replaced uses sla_stopped_at.
+      // Replaced uses its permanent stop time, with updated_at for older records.
       // Rejected keeps the existing updated_at behavior.
       const resolvedAt = isReplaced
-        ? ticket.sla_stopped_at
+        ? ticket.sla_stopped_at || ticket.updated_at
         : isRejected
           ? ticket.updated_at
           : null;
 
       const newStatus = await exports.determineSLAStatus(
-        new Date(ticket.sla_deadline),
+        deadline,
         resolvedAt,
         ticket.priority,
       );
@@ -415,19 +410,20 @@ exports.refreshAllOpenSLAStatuses = async () => {
         continue;
       }
 
+      const deadline = exports.getSLADeadline(complaint.created_at, complaint.priority);
       const isReplaced = complaint.status === "Replaced";
       const isRejected = complaint.status === "Rejected";
 
-      // Replaced uses sla_stopped_at.
+      // Replaced uses its permanent stop time, with updated_at for older records.
       // Rejected retains its previous updated_at behavior.
       const resolvedAt = isReplaced
-        ? complaint.sla_stopped_at
+        ? complaint.sla_stopped_at || complaint.updated_at
         : isRejected
           ? complaint.updated_at
           : null;
 
       const newStatus = await exports.determineSLAStatus(
-        new Date(complaint.sla_deadline),
+        deadline,
         resolvedAt,
         complaint.priority || "medium",
       );

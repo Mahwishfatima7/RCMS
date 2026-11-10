@@ -64,7 +64,7 @@ class Complaint {
     const priority = data.priority || "medium";
     const slaDuration = await slaService.getSLADuration(priority);
     const now = new Date();
-    const slaDeadline = new Date(now.getTime() + slaDuration * 60 * 60 * 1000);
+    const slaDeadline = slaService.getSLADeadline(now, priority);
 
     const result = await insertOne(
       `INSERT INTO complaints (
@@ -129,12 +129,23 @@ class Complaint {
   }
 
   static async update(id, data) {
-    const fields = Object.keys(data)
+    const updateData = { ...data };
+
+    if (Object.prototype.hasOwnProperty.call(data, "priority")) {
+      const complaint = await this.findById(id);
+      updateData.sla_duration = await slaService.getSLADuration(data.priority);
+      updateData.sla_deadline = slaService.getSLADeadline(
+        complaint.created_at,
+        data.priority,
+      );
+    }
+
+    const fields = Object.keys(updateData)
       .map((key) => `${key} = ?`)
       .join(", ");
 
     const incomingStatus = data.status ?? null;
-    const values = [incomingStatus, ...Object.values(data), id];
+    const values = [incomingStatus, ...Object.values(updateData), id];
 
     await updateOne(
       `UPDATE complaints
@@ -150,7 +161,10 @@ class Complaint {
 
     const updated = await this.findById(id);
 
-    if (updated.status === "Replaced") {
+    if (
+      updated.status === "Replaced" ||
+      Object.prototype.hasOwnProperty.call(data, "priority")
+    ) {
       await slaService.refreshSLAStatus(updated);
       return this.findById(id);
     }
